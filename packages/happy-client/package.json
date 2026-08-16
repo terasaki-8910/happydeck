@@ -1,0 +1,32 @@
+{
+  "name": "happy-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clean-room TypeScript client for the Happy relay protocol (device-link auth, E2E crypto, sync) — the shared core behind ccdeck",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "link": "tsx scripts/link.ts",
+    "status": "tsx scripts/status.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.3.0",
+    "@slopus/happy-wire": "workspace:*",
+    "libsodium-wrappers": "0.8.4",
+    "qrcode-terminal": "^0.12.0",
+    "socket.io-client": "^4.8.3",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/libsodium-wrappers": "^0.8.2",
+    "@types/node": ">=24",
+    "@types/qrcode-terminal": "^0.12.2",
+    "tsx": "^4.23.0",
+    "typescript": "5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
