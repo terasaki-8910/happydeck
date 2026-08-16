@@ -1,0 +1,16 @@
+{
+  "name": "multi-claudemonitor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Central desktop dashboard (ccdeck) for monitoring and controlling Happy-managed Claude Code sessions across multiple machines",
+  "type": "module",
+  "packageManager": "pnpm@11.12.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck",
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm -r --if-present test"
+  }
+}
