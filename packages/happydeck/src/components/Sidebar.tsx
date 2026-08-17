@@ -1,6 +1,7 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useEffect } from 'react';
 import type { LiveSession } from '../store/happyStore';
+import { SESSION_DRAG_MIME } from '../lib/dnd';
 import { byRecency } from '../lib/sessionOrder';
 import { deriveTitle } from '../lib/sessionTitle';
 import { useViewStore } from '../store/viewStore';
@@ -87,7 +88,7 @@ export function Sidebar({ sessions, focusedSessionId }: SidebarProps) {
               type="button"
               draggable
               onDragStart={(event) => {
-                event.dataTransfer.setData('application/x-happydeck-session-id', session.id);
+                event.dataTransfer.setData(SESSION_DRAG_MIME, session.id);
                 event.dataTransfer.effectAllowed = 'copy';
               }}
               className={`sidebar-session ${session.id === focusedSessionId ? 'sidebar-session-active' : ''}`}

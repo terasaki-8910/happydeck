@@ -15,8 +15,10 @@ interface SessionTileProps {
   activeWorkspaceId: string | null;
   onAddToWorkspace: (workspaceId: string, sessionId: string) => void;
   onRemoveFromWorkspace: (workspaceId: string, sessionId: string) => void;
-  /** 'solo' renders larger, as the single focused session (see App.tsx / Sidebar.tsx). Defaults to 'grid'. */
+  /** 'solo' renders larger, as one of the focused panes (see App.tsx / Sidebar.tsx). Defaults to 'grid'. */
   variant?: 'grid' | 'solo';
+  /** When set, shows a close button for this pane (multi-pane view only — a single pane is closed by navigating away instead). */
+  onClosePane?: () => void;
 }
 
 function statusOf(session: LiveSession): { label: string; className: string } {
@@ -36,6 +38,7 @@ export function SessionTile({
   onAddToWorkspace,
   onRemoveFromWorkspace,
   variant = 'grid',
+  onClosePane,
 }: SessionTileProps) {
   const sendMessage = useHappyStore((s) => s.sendMessage);
   const setAgentModes = useHappyStore((s) => s.setAgentModes);
@@ -150,6 +153,11 @@ export function SessionTile({
               ))}
             </select>
           )
+        )}
+        {onClosePane && (
+          <button type="button" className="tile-pane-close" title="Close this pane" onClick={onClosePane}>
+            ×
+          </button>
         )}
       </header>
 

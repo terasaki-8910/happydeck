@@ -9,6 +9,7 @@ import {
   HttpClient,
   HttpError,
   RelaySocket,
+  type ListDirectoryResult,
   type SendMessageMeta,
   type SessionAgentModesPatch,
   type SpawnSessionOptions,
@@ -17,6 +18,7 @@ import {
   fetchLatestMessages,
   fetchMachines,
   fetchSessions,
+  machineListDirectory,
   machineSpawnNewSession,
   mintToken,
   sendSessionMessage,
@@ -69,6 +71,7 @@ interface HappyStoreState {
   abortSession: (sessionId: string) => Promise<void>;
   killSession: (sessionId: string) => Promise<void>;
   spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>;
+  listMachineDirectory: (machineId: string, path: string) => Promise<ListDirectoryResult>;
 }
 
 function getAppState(): 'active' | 'background' {
@@ -327,5 +330,11 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     const encryptor = machineEncryptors.get(options.machineId);
     if (!encryptor) throw new Error(`Unknown machine ${options.machineId}`);
     return machineSpawnNewSession(requireSocket(), encryptor, options);
+  },
+
+  async listMachineDirectory(machineId, path) {
+    const encryptor = machineEncryptors.get(machineId);
+    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    return machineListDirectory(requireSocket(), machineId, encryptor, path);
   },
 }));

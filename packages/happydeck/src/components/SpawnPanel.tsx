@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { useHappyStore } from '../store/happyStore';
+import { DirectoryBrowser } from './DirectoryBrowser';
 
 export function SpawnPanel() {
   const machines = useHappyStore((s) => s.machines);
@@ -11,8 +12,11 @@ export function SpawnPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsApproval, setNeedsApproval] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
 
   const onlineMachines = machines.filter((m) => m.active);
+  const selectedMachine = onlineMachines.find((m) => m.id === machineId);
+  const selectedMachineHome = (selectedMachine?.metadata as { homeDir?: string } | null)?.homeDir;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -77,15 +81,20 @@ export function SpawnPanel() {
           );
         })}
       </select>
-      <input
-        className="spawn-directory"
-        value={directory}
-        placeholder="/path/to/project"
-        onChange={(event) => {
-          setDirectory(event.target.value);
-          setNeedsApproval(false);
-        }}
-      />
+      <div className="spawn-directory-row">
+        <input
+          className="spawn-directory"
+          value={directory}
+          placeholder="/path/to/project"
+          onChange={(event) => {
+            setDirectory(event.target.value);
+            setNeedsApproval(false);
+          }}
+        />
+        <button type="button" disabled={!machineId} title="Browse this machine's filesystem" onClick={() => setBrowsing(true)}>
+          browse…
+        </button>
+      </div>
       <button type="submit" disabled={busy || !machineId || !directory.trim()}>
         {needsApproval ? 'create + start' : 'start'}
       </button>
@@ -102,6 +111,19 @@ export function SpawnPanel() {
         cancel
       </button>
       {error && <span className="spawn-error">{error}</span>}
+
+      {browsing && machineId && (
+        <DirectoryBrowser
+          machineId={machineId}
+          startPath={directory.trim() || selectedMachineHome || '/'}
+          onCancel={() => setBrowsing(false)}
+          onSelect={(path) => {
+            setDirectory(path);
+            setNeedsApproval(false);
+            setBrowsing(false);
+          }}
+        />
+      )}
     </form>
   );
 }

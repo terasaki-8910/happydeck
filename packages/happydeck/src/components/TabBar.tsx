@@ -1,8 +1,7 @@
 import { type DragEvent, useState } from 'react';
+import { SESSION_DRAG_MIME } from '../lib/dnd';
 import { useViewStore } from '../store/viewStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
-
-const DRAG_MIME = 'application/x-happydeck-session-id';
 
 export function TabBar() {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
@@ -27,7 +26,7 @@ export function TabBar() {
   };
 
   const acceptDrag = (event: DragEvent) => {
-    if (event.dataTransfer.types.includes(DRAG_MIME)) {
+    if (event.dataTransfer.types.includes(SESSION_DRAG_MIME)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
     }
@@ -36,7 +35,7 @@ export function TabBar() {
   const dropOntoWorkspace = (event: DragEvent, workspaceId: string) => {
     event.preventDefault();
     setDragOverId(null);
-    const sessionId = event.dataTransfer.getData(DRAG_MIME);
+    const sessionId = event.dataTransfer.getData(SESSION_DRAG_MIME);
     if (sessionId) {
       addSessionToWorkspace(workspaceId, sessionId);
       setActiveWorkspace(workspaceId);
