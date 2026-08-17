@@ -77,16 +77,16 @@ export const useHappyStore = create<HappyStoreState>((set) => ({
         }
       };
 
+      // localMachineId is kept in state for UI use (e.g. highlighting "this
+      // machine"'s own sessions) — M3 shows every machine's sessions, not
+      // just this one's, so it's no longer used to filter here.
       const localMachineId = await getLocalMachineId();
       const allSessions = await withTokenRefresh(() => fetchSessions(http, encryption));
-      const localSessions = localMachineId
-        ? allSessions.filter((s) => (s.metadata as { machineId?: string } | null)?.machineId === localMachineId)
-        : allSessions;
 
-      sessionEncryptors = new Map(localSessions.map((s) => [s.id, encryption.openEncryption(s.dataKey)]));
+      sessionEncryptors = new Map(allSessions.map((s) => [s.id, encryption.openEncryption(s.dataKey)]));
 
       const liveSessions: LiveSession[] = await Promise.all(
-        localSessions.map(async (session) => {
+        allSessions.map(async (session) => {
           const encryptor = sessionEncryptors.get(session.id)!;
           const messages = await withTokenRefresh(() => fetchLatestMessages(http, encryptor, session.id, 20));
           return { ...session, messages: [...messages].reverse(), thinking: false };
