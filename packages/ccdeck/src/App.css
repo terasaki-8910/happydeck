@@ -86,11 +86,75 @@ body {
   color: #f27272;
 }
 
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .tab-bar {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
+}
+
+.spawn-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.spawn-toggle:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.spawn-panel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.spawn-panel select,
+.spawn-panel button {
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.spawn-directory {
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 10px;
+  width: 220px;
+}
+
+.spawn-directory:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.spawn-error {
+  color: var(--accent);
+  font-size: 11px;
 }
 
 .tab {
@@ -271,6 +335,87 @@ body {
   padding: 2px 4px;
 }
 
+.tile-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.tile-controls select,
+.tile-controls button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.tile-controls select:hover,
+.tile-controls button:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.tile-controls button:disabled,
+.tile-controls select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tile-controls .tile-kill {
+  margin-left: auto;
+  color: #f27272;
+  border-color: #4a2b2b;
+}
+
+.tile-permissions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(240, 166, 60, 0.08);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.permission-request {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.permission-tool {
+  flex: 1;
+  color: var(--accent);
+}
+
+.permission-request button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.tile-action-error {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: #f27272;
+  flex-shrink: 0;
+}
+
 .tile-messages {
   flex: 1;
   overflow-y: auto;
@@ -305,4 +450,45 @@ body {
 .tile-message.role-system {
   color: var(--text-faint);
   font-size: 11px;
+}
+
+.tile-composer {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.tile-composer-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  min-width: 0;
+}
+
+.tile-composer-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tile-composer button {
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.tile-composer button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

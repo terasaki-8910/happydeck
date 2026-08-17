@@ -30,7 +30,10 @@ export interface DecryptedSession {
   updatedAt: number;
   /** null if unwrapped metadata failed to parse — the row itself is still kept (metadata may be legitimately absent). */
   metadata: unknown | null;
+  /** Optimistic-concurrency version for `metadata` — required by updateSessionAgentModes. */
+  metadataVersion: number;
   agentState: unknown | null;
+  agentStateVersion: number;
   /** The row's unwrapped per-session AES key, or null for a legacy session. Reuse this to decrypt its messages. */
   dataKey: Uint8Array | null;
 }
@@ -70,7 +73,9 @@ export async function fetchSessions(http: HttpClient, encryption: Encryption): P
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       metadata: metadata ?? null,
+      metadataVersion: session.metadataVersion,
       agentState,
+      agentStateVersion: session.agentStateVersion,
       dataKey,
     });
   }

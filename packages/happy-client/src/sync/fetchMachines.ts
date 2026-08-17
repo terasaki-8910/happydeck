@@ -25,6 +25,14 @@ export interface DecryptedMachine {
   /** null when metadata is absent OR failed to decrypt — the machine row itself is always kept (see resilience rule below). */
   metadata: unknown | null;
   daemonState: unknown | null;
+  /**
+   * The row's unwrapped per-machine AES key, or null for a legacy machine
+   * (or one whose key failed to unwrap — see the resilience rule below).
+   * Reuse this via `encryption.openEncryption(dataKey)` for machineRPC
+   * calls (e.g. spawning a session) — do NOT pass null unconditionally,
+   * that only happens to work when the machine is actually legacy.
+   */
+  dataKey: Uint8Array | null;
 }
 
 /**
@@ -70,6 +78,7 @@ export async function fetchMachines(http: HttpClient, encryption: Encryption): P
       updatedAt: machine.updatedAt,
       metadata,
       daemonState,
+      dataKey,
     });
   }
 

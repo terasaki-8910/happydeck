@@ -11,3 +11,6 @@ target/
 
 # Tauri
 packages/ccdeck/src-tauri/target/
+
+# Scratch dirs (e.g. throwaway spawned-session test targets)
+.scratch/

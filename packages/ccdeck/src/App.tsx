@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import './App.css';
 import { SessionTile } from './components/SessionTile';
+import { SpawnPanel } from './components/SpawnPanel';
 import { TabBar } from './components/TabBar';
 import { useHappyStore } from './store/happyStore';
 import { useWorkspaceStore } from './store/workspaceStore';
@@ -39,7 +40,10 @@ function App() {
         </span>
       </header>
 
-      <TabBar />
+      <div className="toolbar">
+        <TabBar />
+        <SpawnPanel />
+      </div>
 
       {status === 'loading' && <p className="app-message">connecting…</p>}
 
