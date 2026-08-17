@@ -27,7 +27,14 @@ import {
   subscribeToRelayUpdates,
   updateSessionAgentModes,
 } from 'happy-client';
+import { ensureNotificationPermission, notify } from '../lib/notifications';
 import { getLocalMachineId, getStoredCredentials } from '../lib/tauri';
+
+const SESSION_EVENT_TITLES: Record<string, string> = {
+  done: 'Session finished',
+  permission: 'Permission needed',
+  question: 'Question from agent',
+};
 
 export type HappyStatus = 'idle' | 'linking-required' | 'loading' | 'ready' | 'error';
 
@@ -113,6 +120,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
 
   async bootstrap() {
     set({ status: 'loading', error: null });
+    ensureNotificationPermission();
     try {
       const credentials = await getStoredCredentials();
       if (!credentials) {
@@ -248,16 +256,32 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
           }
         },
         onEphemeral: (ephemeral) => {
-          if (ephemeral.type !== 'activity') {
+          if (ephemeral.type === 'activity') {
+            const id = ephemeral.id as string | undefined;
+            if (!id || !sessionEncryptors.has(id)) {
+              return;
+            }
+            set((state) => ({
+              sessions: state.sessions.map((s) => (s.id === id ? { ...s, thinking: Boolean(ephemeral.thinking) } : s)),
+            }));
             return;
           }
-          const id = ephemeral.id as string | undefined;
-          if (!id || !sessionEncryptors.has(id)) {
-            return;
+
+          if (ephemeral.type === 'session-event') {
+            // Same signal that triggers the mobile push notification — the
+            // natural hook for a native Mac notification too.
+            const sessionId = ephemeral.sessionId as string | undefined;
+            const kind = ephemeral.kind as string | undefined;
+            if (!sessionId || !kind) {
+              return;
+            }
+            const session = get().sessions.find((s) => s.id === sessionId);
+            const metadata = session?.metadata as { path?: string; host?: string } | null;
+            const label = metadata?.host ? `${metadata.host}: ${metadata.path ?? sessionId}` : (metadata?.path ?? sessionId);
+            const title = (ephemeral.title as string | undefined) || SESSION_EVENT_TITLES[kind] || kind;
+            const body = (ephemeral.body as string | undefined) || label;
+            notify(title, body);
           }
-          set((state) => ({
-            sessions: state.sessions.map((s) => (s.id === id ? { ...s, thinking: Boolean(ephemeral.thinking) } : s)),
-          }));
         },
       });
 

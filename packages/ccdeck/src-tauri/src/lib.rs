@@ -58,6 +58,7 @@ fn get_local_machine_id() -> Result<Option<String>, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![get_credentials, get_local_machine_id])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
