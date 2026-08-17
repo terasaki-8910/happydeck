@@ -1,5 +1,6 @@
 import { decodeBase64, encodeBase64 } from './base64';
 import { AES256Encryption, SecretBoxEncryption, type Decryptor, type Encryptor, decodeVersionedRecord, encodeVersionedRecord } from './encryptor';
+import { encodeHex } from './hex';
 import { deriveKey } from './hd';
 import { boxSeedKeyPair, decryptBox, encryptBox, type KeyPair } from './nacl';
 
@@ -31,7 +32,7 @@ export class Encryption {
     const contentDataKey = deriveKey(masterSecret, 'Happy EnCoder', ['content']);
     const contentKeyPair = await boxSeedKeyPair(contentDataKey);
     const anonIdBytes = deriveKey(masterSecret, 'Happy Coder', ['analytics', 'id']);
-    const anonID = Buffer.from(anonIdBytes).toString('hex').slice(0, 16).toLowerCase();
+    const anonID = encodeHex(anonIdBytes).slice(0, 16);
     const masterBlobKey = deriveKey(masterSecret, 'Happy Blobs', ['master']);
     return new Encryption(masterSecret, contentKeyPair, anonID, masterBlobKey);
   }

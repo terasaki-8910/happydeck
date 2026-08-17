@@ -12,10 +12,13 @@
  * truncated) — only success/failure and non-secret metadata are printed.
  */
 import qrcodeTerminal from 'qrcode-terminal';
+import { setServerUrl } from '../src/api/serverConfig';
 import { setCredentials } from '../src/auth/credentials';
 import { pollAccountLink, startAccountLink } from '../src/auth/link';
 import { Encryption } from '../src/crypto/encryption';
 import { encodeBase64 } from '../src/crypto/base64';
+
+setServerUrl(process.env.HAPPY_SERVER_URL ?? null);
 
 async function main() {
   console.log('Generating a device-link request...\n');

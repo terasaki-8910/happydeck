@@ -8,6 +8,7 @@
 import { getCredentials, setCredentials } from '../src/auth/credentials';
 import { mintToken } from '../src/auth/token';
 import { HttpClient, HttpError } from '../src/api/http';
+import { setServerUrl } from '../src/api/serverConfig';
 import { RelaySocket } from '../src/api/socket';
 import { encodeBase64, decodeBase64 } from '../src/crypto/base64';
 import { Encryption } from '../src/crypto/encryption';
@@ -15,6 +16,8 @@ import { fetchMachines } from '../src/sync/fetchMachines';
 import { fetchSessions } from '../src/sync/fetchSessions';
 import { fetchLatestMessages } from '../src/sync/fetchMessages';
 import { subscribeToRelayUpdates } from '../src/sync/liveUpdates';
+
+setServerUrl(process.env.HAPPY_SERVER_URL ?? null);
 
 const LIVE_WINDOW_MS = 10_000;
 
