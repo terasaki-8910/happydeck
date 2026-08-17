@@ -53,7 +53,9 @@ function toolCallPart(ev: Record<string, unknown>): RenderablePart {
   const label = typeof ev.title === 'string' && ev.title ? ev.title : name;
   const args = (ev.args ?? {}) as Record<string, unknown>;
   const detail = toolCallDetail(name, args);
-  const description = typeof ev.description === 'string' && ev.description.trim() ? ev.description.trim() : null;
+  // The CLI often sets description === title verbatim — showing both reads as a duplicated line.
+  const rawDescription = typeof ev.description === 'string' ? ev.description.trim() : '';
+  const description = rawDescription && rawDescription !== label ? rawDescription : null;
   return { kind: 'tool-call', label, detail, description };
 }
 

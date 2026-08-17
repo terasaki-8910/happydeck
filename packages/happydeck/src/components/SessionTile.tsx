@@ -1,14 +1,15 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES } from '../lib/agentOptions';
 import { downloadTranscript } from '../lib/exportTranscript';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
 import { deriveTitle } from '../lib/sessionTitle';
 import { type AgentState, type LiveSession, useHappyStore } from '../store/happyStore';
 import { useSelectionStore } from '../store/selectionStore';
 import type { Workspace } from '../store/workspaceStore';
-import { ConfirmDialog } from './ConfirmDialog';
+import { AgentSettingsPopover } from './AgentSettingsPopover';
+import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { TileActionsMenu } from './TileActionsMenu';
 
 interface SessionTileProps {
   session: LiveSession;
@@ -33,6 +34,33 @@ function statusOf(session: LiveSession): { label: string; className: string } {
   return { label: 'online', className: 'status-online' };
 }
 
+/** A tool-call line collapses to just its label by default — text is the point, tool activity is secondary. */
+function ToolCallLine({ part }: { part: Extract<RenderablePart, { kind: 'tool-call' }> }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = Boolean(part.detail || part.description);
+
+  return (
+    <div className={`tile-message tile-tool-call ${expanded ? 'tile-tool-call-expanded' : ''}`}>
+      <button
+        type="button"
+        className="tile-tool-call-toggle"
+        onClick={() => setExpanded((v) => !v)}
+        disabled={!hasMore}
+        title={hasMore ? (expanded ? 'Collapse' : 'Expand') : undefined}
+      >
+        {hasMore && <span className="tile-tool-call-caret">{expanded ? '▾' : '▸'}</span>}
+        <span className="tile-tool-call-label">{part.label}</span>
+      </button>
+      {expanded && (
+        <div className="tile-tool-call-body">
+          {part.detail && <div className="tile-tool-call-detail">{part.detail}</div>}
+          {part.description && <div className="tile-tool-call-description">{part.description}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SessionTile({
   session,
   workspaces,
@@ -44,6 +72,7 @@ export function SessionTile({
 }: SessionTileProps) {
   const sendMessage = useHappyStore((s) => s.sendMessage);
   const setAgentModes = useHappyStore((s) => s.setAgentModes);
+  const renameSession = useHappyStore((s) => s.renameSession);
   const allowRequest = useHappyStore((s) => s.allowRequest);
   const denyRequest = useHappyStore((s) => s.denyRequest);
   const abortSession = useHappyStore((s) => s.abortSession);
@@ -54,12 +83,15 @@ export function SessionTile({
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [confirmingKill, setConfirmingKill] = useState(false);
+  const [renamingTitle, setRenamingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
   const messagesRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
 
   const status = statusOf(session);
-  const metadata = session.metadata as { path?: string; host?: string; permissionMode?: string; modelMode?: string; effortLevel?: string } | null;
+  const metadata = session.metadata as
+    | { path?: string; host?: string; permissionMode?: string; modelMode?: string; effortLevel?: string; slashCommands?: string[]; mcpServers?: { name: string; status: string }[] }
+    | null;
   const path = metadata?.path ?? session.id;
   const title = deriveTitle(session.metadata, session.messages) ?? path;
   const agentState = session.agentState as AgentState | null;
@@ -105,9 +137,14 @@ export function SessionTile({
     runAction(() => sendMessage(session.id, text));
   };
 
-  const handleKillConfirmed = () => {
-    setConfirmingKill(false);
-    runAction(() => killSession(session.id));
+  const submitTitleRename = (event: FormEvent) => {
+    event.preventDefault();
+    const trimmed = titleDraft.trim();
+    if (trimmed && trimmed !== title) {
+      runAction(() => renameSession(session.id, trimmed)).then(() => setRenamingTitle(false));
+    } else {
+      setRenamingTitle(false);
+    }
   };
 
   return (
@@ -124,9 +161,31 @@ export function SessionTile({
         )}
         <span className={`status-dot ${status.className}`} title={`status: ${status.label}`} />
         {metadata?.host && <span className="tile-host">{metadata.host}</span>}
-        <span className="tile-title" title={path}>
-          {title}
-        </span>
+        {renamingTitle ? (
+          <form className="tile-title-rename" onSubmit={submitTitleRename}>
+            <input
+              autoFocus
+              value={titleDraft}
+              disabled={busy}
+              onChange={(event) => setTitleDraft(event.target.value)}
+              onBlur={submitTitleRename}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setRenamingTitle(false);
+              }}
+            />
+          </form>
+        ) : (
+          <span
+            className="tile-title"
+            title={`${path} (click to rename)`}
+            onClick={() => {
+              setTitleDraft(title);
+              setRenamingTitle(true);
+            }}
+          >
+            {title}
+          </span>
+        )}
         {activeWorkspaceId ? (
           <button
             type="button"
@@ -163,68 +222,14 @@ export function SessionTile({
             ×
           </button>
         )}
+        <TileActionsMenu
+          title={title}
+          busy={busy}
+          onAbort={() => runAction(() => abortSession(session.id))}
+          onDownload={() => runAction(() => downloadTranscript(session))}
+          onKill={() => runAction(() => killSession(session.id))}
+        />
       </header>
-
-      <div className="tile-controls">
-        <select
-          value={metadata?.permissionMode ?? 'default'}
-          disabled={busy}
-          onChange={(event) => runAction(() => setAgentModes(session.id, { permissionMode: event.target.value }))}
-        >
-          {CLAUDE_PERMISSION_MODES.map((mode) => (
-            <option key={mode.key} value={mode.key}>
-              {mode.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={metadata?.modelMode ?? 'default'}
-          disabled={busy}
-          onChange={(event) => runAction(() => setAgentModes(session.id, { modelMode: event.target.value }))}
-        >
-          {CLAUDE_MODEL_MODES.map((model) => (
-            <option key={model.key} value={model.key}>
-              {model.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={metadata?.effortLevel ?? 'medium'}
-          disabled={busy}
-          onChange={(event) => runAction(() => setAgentModes(session.id, { effortLevel: event.target.value }))}
-        >
-          {CLAUDE_EFFORT_LEVELS.map((effort) => (
-            <option key={effort.key} value={effort.key}>
-              {effort.name}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={busy}
-          title="Download this session's transcript as a text file"
-          onClick={() => runAction(() => downloadTranscript(session))}
-        >
-          download
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          title="Stop the current tool use and have the agent wait for you — the session process keeps running."
-          onClick={() => runAction(() => abortSession(session.id))}
-        >
-          abort
-        </button>
-        <button
-          type="button"
-          className="tile-kill"
-          disabled={busy}
-          title="Kill the session's CLI process immediately — irreversible, not just an interrupt."
-          onClick={() => setConfirmingKill(true)}
-        >
-          kill
-        </button>
-      </div>
 
       {pendingRequests.length > 0 && (
         <div className="tile-permissions">
@@ -255,11 +260,7 @@ export function SessionTile({
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
                 </div>
               ) : part.kind === 'tool-call' ? (
-                <div className="tile-message tile-tool-call">
-                  <span className="tile-tool-call-label">{part.label}</span>
-                  {part.detail && <span className="tile-tool-call-detail">{part.detail}</span>}
-                  {part.description && <span className="tile-tool-call-description">{part.description}</span>}
-                </div>
+                <ToolCallLine part={part} />
               ) : part.kind === 'file' ? (
                 <p className="tile-message tile-message-code">[file] {part.name}</p>
               ) : (
@@ -270,29 +271,32 @@ export function SessionTile({
         })}
       </div>
 
-      <form className="tile-composer" onSubmit={handleSend}>
-        <input
-          className="tile-composer-input"
-          value={draft}
-          disabled={busy}
-          placeholder="message this session…"
-          onChange={(event) => setDraft(event.target.value)}
+      <div className="tile-bottom-bar">
+        <AgentSettingsPopover
+          permissionMode={metadata?.permissionMode ?? 'default'}
+          modelMode={metadata?.modelMode ?? 'default'}
+          effortLevel={metadata?.effortLevel ?? 'medium'}
+          busy={busy}
+          onChange={(patch) => runAction(() => setAgentModes(session.id, patch))}
         />
-        <button type="submit" disabled={busy || !draft.trim()}>
-          send
-        </button>
-      </form>
-
-      {confirmingKill && (
-        <ConfirmDialog
-          title="Kill this session?"
-          body={`This immediately terminates the CLI process on the machine it's running on — not an interrupt, the process is gone. Cannot be undone.\n\n${title}`}
-          confirmLabel="kill process"
-          danger
-          onConfirm={handleKillConfirmed}
-          onCancel={() => setConfirmingKill(false)}
-        />
-      )}
+        <form className="tile-composer" onSubmit={handleSend}>
+          <ComposerPlusMenu
+            slashCommands={metadata?.slashCommands ?? []}
+            mcpServers={metadata?.mcpServers ?? []}
+            onInsertSlashCommand={(command) => setDraft((d) => `${d}/${command} `)}
+          />
+          <input
+            className="tile-composer-input"
+            value={draft}
+            disabled={busy}
+            placeholder="message this session…"
+            onChange={(event) => setDraft(event.target.value)}
+          />
+          <button type="submit" disabled={busy || !draft.trim()}>
+            send
+          </button>
+        </form>
+      </div>
     </section>
   );
 }

@@ -15,7 +15,7 @@ interface SessionMenuProps {
   onResume: () => Promise<unknown>;
 }
 
-/** The "⋯" menu on a sidebar session row: pin, rename, add to a workspace, resume (offline only), delete. */
+/** The "⋮" menu on a sidebar session row: pin, rename, add to a workspace, resume (offline only), delete. */
 export function SessionMenu({ session, title, pinned, workspaces, onTogglePin, onAddToWorkspace, onRename, onDelete, onResume }: SessionMenuProps) {
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -88,7 +88,7 @@ export function SessionMenu({ session, title, pinned, workspaces, onTogglePin, o
           setOpen((v) => !v);
         }}
       >
-        ⋯
+        ⋮
       </button>
 
       {open && (
