@@ -3,8 +3,6 @@ import './App.css';
 import { BulkActionBar } from './components/BulkActionBar';
 import { SessionTile } from './components/SessionTile';
 import { Sidebar } from './components/Sidebar';
-import { SpawnPanel } from './components/SpawnPanel';
-import { TabBar } from './components/TabBar';
 import { mostRecentSession } from './lib/sessionOrder';
 import { useHappyStore } from './store/happyStore';
 import { useViewStore } from './store/viewStore';
@@ -55,11 +53,6 @@ function App() {
       <Sidebar sessions={sessions} focusedSessionId={focusedSessionId} />
 
       <main className="app-main">
-        <div className="toolbar">
-          <TabBar />
-          <SpawnPanel />
-        </div>
-
         {mode.type === 'grid' && <BulkActionBar />}
 
         {status === 'loading' && <p className="app-message">connecting…</p>}

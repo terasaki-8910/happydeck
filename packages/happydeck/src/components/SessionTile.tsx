@@ -1,6 +1,8 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES } from '../lib/agentOptions';
-import { messageRole, summarizeMessageContent } from '../lib/formatMessage';
+import { downloadTranscript } from '../lib/exportTranscript';
+import { isCodeLikeMessage, isRenderableMessage, messageRole, summarizeMessageContent } from '../lib/formatMessage';
+import { deriveTitle } from '../lib/sessionTitle';
 import { type AgentState, type LiveSession, useHappyStore } from '../store/happyStore';
 import { useSelectionStore } from '../store/selectionStore';
 import type { Workspace } from '../store/workspaceStore';
@@ -48,13 +50,33 @@ export function SessionTile({
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmingKill, setConfirmingKill] = useState(false);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
 
   const status = statusOf(session);
   const metadata = session.metadata as { path?: string; host?: string; permissionMode?: string; modelMode?: string; effortLevel?: string } | null;
   const path = metadata?.path ?? session.id;
-  const title = session.title ?? path;
+  const title = deriveTitle(session.metadata, session.messages) ?? path;
   const agentState = session.agentState as AgentState | null;
   const pendingRequests = Object.entries(agentState?.requests ?? {});
+  const visibleMessages = session.messages.filter((m) => isRenderableMessage(m.content));
+
+  // Follow new output as it streams in, but only if the user hasn't scrolled
+  // up to read history — never yank them back down mid-read. isNearBottomRef
+  // reflects scroll position as of BEFORE this update (kept live by
+  // onScroll below), not the post-append state.
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (el && isNearBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [visibleMessages.length]);
+
+  const handleMessagesScroll = () => {
+    const el = messagesRef.current;
+    if (!el) return;
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
 
   const runAction = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -168,6 +190,14 @@ export function SessionTile({
         <button
           type="button"
           disabled={busy}
+          title="Download this session's transcript as a text file"
+          onClick={() => runAction(() => downloadTranscript(session))}
+        >
+          download
+        </button>
+        <button
+          type="button"
+          disabled={busy}
           title="Stop the current tool use and have the agent wait for you — the session process keeps running."
           onClick={() => runAction(() => abortSession(session.id))}
         >
@@ -202,13 +232,18 @@ export function SessionTile({
 
       {actionError && <p className="tile-action-error">{actionError}</p>}
 
-      <div className="tile-messages">
-        {session.messages.length === 0 && <p className="tile-empty">(no messages)</p>}
-        {session.messages.map((message) => (
-          <p key={message.id} className={`tile-message role-${messageRole(message.content)}`}>
-            {summarizeMessageContent(message.content)}
-          </p>
-        ))}
+      <div className="tile-messages" ref={messagesRef} onScroll={handleMessagesScroll}>
+        {visibleMessages.length === 0 && <p className="tile-empty">(no messages)</p>}
+        {visibleMessages.map((message) => {
+          const role = messageRole(message.content);
+          return (
+            <div key={message.id} className={`message-row role-${role}`}>
+              <p className={`tile-message ${isCodeLikeMessage(message.content) ? 'tile-message-code' : ''}`}>
+                {summarizeMessageContent(message.content)}
+              </p>
+            </div>
+          );
+        })}
       </div>
 
       <form className="tile-composer" onSubmit={handleSend}>

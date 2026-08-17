@@ -43,6 +43,26 @@ function toolCallSummary(ev: Record<string, unknown>): string {
   return detail ? `[${label}] ${detail}` : `[${label}]`;
 }
 
+/** Session-envelope event types that carry no human-readable content of their own — pure protocol bookkeeping, not worth a transcript line. */
+const HIDDEN_SESSION_EVENTS = new Set(['turn-start', 'turn-end', 'tool-call-end', 'start', 'stop']);
+
+/** Whether this message is worth a line in the transcript at all. */
+export function isRenderableMessage(content: unknown): boolean {
+  if (content === null || content === undefined) {
+    return true; // "(failed to decrypt)" is worth showing
+  }
+  if (typeof content !== 'object') {
+    return true;
+  }
+  const record = content as Record<string, unknown>;
+  if (record.role === 'session') {
+    const inner = record.content as Record<string, unknown> | undefined;
+    const ev = inner?.ev as Record<string, unknown> | undefined;
+    return !HIDDEN_SESSION_EVENTS.has(String(ev?.t));
+  }
+  return true;
+}
+
 /** Renders a decrypted message's content (legacy user/agent shape or the newer session-envelope shape) as one readable line. */
 export function summarizeMessageContent(content: unknown): string {
   if (content === null || content === undefined) {
@@ -71,6 +91,12 @@ export function summarizeMessageContent(content: unknown): string {
     if (ev?.t === 'text' && typeof ev.text === 'string') {
       return truncate(ev.text, 400);
     }
+    if (ev?.t === 'service' && typeof ev.text === 'string') {
+      return ev.text;
+    }
+    if (ev?.t === 'file' && typeof ev.name === 'string') {
+      return `[file] ${ev.name}`;
+    }
     if (ev?.t === 'tool-call-start') {
       return toolCallSummary(ev);
     }
@@ -91,4 +117,21 @@ export function messageRole(content: unknown): 'user' | 'agent' | 'system' {
     }
   }
   return 'system';
+}
+
+/** true = render this line in the monospace font (code/commands/paths), false = normal prose font. */
+export function isCodeLikeMessage(content: unknown): boolean {
+  if (!content || typeof content !== 'object') {
+    return false;
+  }
+  const record = content as Record<string, unknown>;
+  const inner = record.content as Record<string, unknown> | undefined;
+  if (record.role === 'session') {
+    const ev = inner?.ev as Record<string, unknown> | undefined;
+    return ev?.t === 'tool-call-start' || ev?.t === 'file';
+  }
+  if (record.role === 'agent') {
+    return inner?.type === 'tool-call' || inner?.type === 'tool_use';
+  }
+  return false;
 }

@@ -1,23 +1,26 @@
 import type { DecryptedMessage } from 'happy-client';
 
 /**
- * Happy's session title isn't a metadata field the server populates — it
- * only exists as the agent calling the `mcp__happy__change_title` tool at
- * some point in the session's message history (usually early, but a later
- * call overrides it). Scans decrypted messages for that tool call and
- * returns the most recent title found, highest `seq` wins.
+ * Happy's own apps show `metadata.summary.text` — set when the agent calls
+ * the `mcp__happy__change_title` tool — as the session title. It's a durable
+ * field (propagates live via the same update-session event as everything
+ * else in metadata), not something to re-derive by hand each render.
+ *
+ * Falls back to scanning already-loaded messages for that tool call
+ * directly, in case metadata hasn't synced yet — costs nothing extra since
+ * those messages are already fetched for the transcript.
  */
-export function extractTitle(messages: DecryptedMessage[]): string | null {
-  let best: { seq: number; title: string } | null = null;
-
-  for (const message of messages) {
-    const title = titleFromMessageContent(message.content);
-    if (title && (!best || message.seq > best.seq)) {
-      best = { seq: message.seq, title };
-    }
+export function deriveTitle(metadata: unknown, messages: DecryptedMessage[]): string | null {
+  const summary = (metadata as Record<string, unknown> | null)?.summary as { text?: string } | undefined;
+  if (typeof summary?.text === 'string' && summary.text.trim()) {
+    return summary.text.trim();
   }
 
-  return best?.title ?? null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const title = titleFromMessageContent(messages[i].content);
+    if (title) return title;
+  }
+  return null;
 }
 
 function titleFromMessageContent(content: unknown): string | null {
