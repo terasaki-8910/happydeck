@@ -94,6 +94,9 @@ export function SpawnPanel() {
         onClick={() => {
           setOpen(false);
           setError(null);
+          setMachineId('');
+          setDirectory('');
+          setNeedsApproval(false);
         }}
       >
         cancel

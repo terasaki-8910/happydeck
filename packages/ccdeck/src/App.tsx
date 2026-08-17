@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import './App.css';
+import { BulkActionBar } from './components/BulkActionBar';
 import { SessionTile } from './components/SessionTile';
 import { SpawnPanel } from './components/SpawnPanel';
 import { TabBar } from './components/TabBar';
@@ -44,6 +45,8 @@ function App() {
         <TabBar />
         <SpawnPanel />
       </div>
+
+      <BulkActionBar />
 
       {status === 'loading' && <p className="app-message">connecting…</p>}
 

@@ -2,6 +2,7 @@ import { type FormEvent, useState } from 'react';
 import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES } from '../lib/agentOptions';
 import { messageRole, summarizeMessageContent } from '../lib/formatMessage';
 import { type AgentState, type LiveSession, useHappyStore } from '../store/happyStore';
+import { useSelectionStore } from '../store/selectionStore';
 import type { Workspace } from '../store/workspaceStore';
 
 interface SessionTileProps {
@@ -30,6 +31,8 @@ export function SessionTile({ session, workspaces, activeWorkspaceId, onAddToWor
   const denyRequest = useHappyStore((s) => s.denyRequest);
   const abortSession = useHappyStore((s) => s.abortSession);
   const killSession = useHappyStore((s) => s.killSession);
+  const isSelected = useSelectionStore((s) => s.selected.has(session.id));
+  const toggleSelected = useSelectionStore((s) => s.toggle);
 
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -69,8 +72,15 @@ export function SessionTile({ session, workspaces, activeWorkspaceId, onAddToWor
   };
 
   return (
-    <section className="tile">
+    <section className={`tile ${isSelected ? 'tile-selected' : ''}`}>
       <header className="tile-header">
+        <input
+          type="checkbox"
+          className="tile-select"
+          checked={isSelected}
+          onChange={() => toggleSelected(session.id)}
+          title="Select for bulk actions"
+        />
         <span className={`status-dot ${status.className}`} />
         {metadata?.host && <span className="tile-host">{metadata.host}</span>}
         <span className="tile-path" title={path}>

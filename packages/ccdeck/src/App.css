@@ -157,6 +157,74 @@ body {
   font-size: 11px;
 }
 
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(240, 166, 60, 0.08);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.bulk-count {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.bulk-send {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.bulk-send-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  min-width: 0;
+}
+
+.bulk-send-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.bulk-bar button {
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.bulk-bar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.bulk-result {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.bulk-clear {
+  margin-left: auto;
+}
+
 .tab {
   background: transparent;
   border: 1px solid transparent;
@@ -244,6 +312,16 @@ body {
   min-height: 220px;
   max-height: 420px;
   overflow: hidden;
+}
+
+.tile-selected {
+  border-color: var(--accent);
+}
+
+.tile-select {
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .tile-header {
