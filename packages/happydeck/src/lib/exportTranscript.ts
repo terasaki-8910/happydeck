@@ -1,11 +1,21 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
 import type { LiveSession } from '../store/happyStore';
-import { isRenderableMessage, messageRole, summarizeMessageContent } from './formatMessage';
+import { messageRole, renderablePart } from './formatMessage';
 import { deriveTitle } from './sessionTitle';
 
 function sanitizeForFilename(value: string): string {
   return value.replace(/[/\\:*?"<>|]+/g, '_').slice(0, 60).trim() || 'session';
+}
+
+function partToText(part: NonNullable<ReturnType<typeof renderablePart>>): string {
+  if (part.kind === 'text') return part.text;
+  if (part.kind === 'file') return `[file] ${part.name}`;
+  if (part.kind === 'raw') return part.text;
+  const bits = [`[${part.label}]`];
+  if (part.detail) bits.push(part.detail);
+  if (part.description) bits.push(`— ${part.description}`);
+  return bits.join(' ');
 }
 
 function buildTranscriptText(session: LiveSession): string {
@@ -14,9 +24,10 @@ function buildTranscriptText(session: LiveSession): string {
   const lines: string[] = [`# ${title}`, `host: ${metadata?.host ?? 'unknown'}`, `path: ${metadata?.path ?? 'unknown'}`, `session: ${session.id}`, ''];
 
   for (const message of session.messages) {
-    if (!isRenderableMessage(message.content)) continue;
+    const part = renderablePart(message.content);
+    if (!part) continue;
     const timestamp = new Date(message.createdAt).toISOString();
-    lines.push(`[${timestamp}] ${messageRole(message.content)}:`, summarizeMessageContent(message.content), '');
+    lines.push(`[${timestamp}] ${messageRole(message.content)}:`, partToText(part), '');
   }
 
   return lines.join('\n');

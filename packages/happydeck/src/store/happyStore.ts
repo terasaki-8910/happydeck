@@ -10,27 +10,36 @@ import {
   HttpError,
   RelaySocket,
   type ListDirectoryResult,
+  type ReadFileResult,
   type SendMessageMeta,
   type SessionAgentModesPatch,
   type SpawnSessionOptions,
   type SpawnSessionResult,
+  type WriteFileResult,
   decodeBase64,
   fetchLatestMessages,
   fetchMachines,
   fetchSessions,
   machineListDirectory,
+  machineReadFile,
+  machineResumeSession,
   machineSpawnNewSession,
+  machineWriteFile,
   mintToken,
   sendSessionMessage,
   sessionAbort,
   sessionAllow,
+  sessionDelete,
   sessionDeny,
   sessionKill,
   subscribeToRelayUpdates,
   updateSessionAgentModes,
+  updateSessionSummary,
 } from 'happy-client';
+import { MOCK_ENABLED, mockMachines, mockSessions } from '../lib/mockData';
 import { ensureNotificationPermission, notify } from '../lib/notifications';
 import { getLocalMachineId, getStoredCredentials } from '../lib/tauri';
+import { useSettingsStore } from './settingsStore';
 
 const SESSION_EVENT_TITLES: Record<string, string> = {
   done: 'Session finished',
@@ -72,6 +81,11 @@ interface HappyStoreState {
   killSession: (sessionId: string) => Promise<void>;
   spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>;
   listMachineDirectory: (machineId: string, path: string) => Promise<ListDirectoryResult>;
+  resumeSession: (sessionId: string) => Promise<SpawnSessionResult>;
+  deleteSession: (sessionId: string) => Promise<void>;
+  renameSession: (sessionId: string, title: string) => Promise<void>;
+  readMachineFile: (machineId: string, path: string) => Promise<ReadFileResult>;
+  writeMachineFile: (machineId: string, path: string, content: string) => Promise<WriteFileResult>;
 }
 
 function getAppState(): 'active' | 'background' {
@@ -123,6 +137,12 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
 
   async bootstrap() {
     set({ status: 'loading', error: null });
+
+    if (MOCK_ENABLED) {
+      set({ status: 'ready', localMachineId: 'mock-machine-mac', sessions: mockSessions(), machines: mockMachines() });
+      return;
+    }
+
     ensureNotificationPermission();
     try {
       const credentials = await getStoredCredentials();
@@ -269,6 +289,10 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
             if (!sessionId || !kind) {
               return;
             }
+            const notifyPrefs = useSettingsStore.getState().notify;
+            if (kind in notifyPrefs && !notifyPrefs[kind as keyof typeof notifyPrefs]) {
+              return;
+            }
             const session = get().sessions.find((s) => s.id === sessionId);
             const metadata = session?.metadata as { path?: string; host?: string } | null;
             const label = metadata?.host ? `${metadata.host}: ${metadata.path ?? sessionId}` : (metadata?.path ?? sessionId);
@@ -336,5 +360,51 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
     return machineListDirectory(requireSocket(), machineId, encryptor, path);
+  },
+
+  async resumeSession(sessionId) {
+    const session = get().sessions.find((s) => s.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    const machineId = (session.metadata as { machineId?: string } | null)?.machineId;
+    if (!machineId) throw new Error('This session has no recorded machineId to resume it on');
+    const encryptor = machineEncryptors.get(machineId);
+    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    return machineResumeSession(requireSocket(), encryptor, machineId, sessionId);
+  },
+
+  async deleteSession(sessionId) {
+    await sessionDelete(requireHttp(), sessionId);
+    sessionEncryptors.delete(sessionId);
+    set((state) => ({ sessions: state.sessions.filter((s) => s.id !== sessionId) }));
+  },
+
+  async renameSession(sessionId, title) {
+    const session = get().sessions.find((s) => s.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    const result = await updateSessionSummary(
+      requireSocket(),
+      sessionId,
+      requireSessionEncryptor(sessionId),
+      (session.metadata as Record<string, unknown>) ?? {},
+      session.metadataVersion,
+      title,
+    );
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, metadata: result.metadata, metadataVersion: result.version } : s,
+      ),
+    }));
+  },
+
+  async readMachineFile(machineId, path) {
+    const encryptor = machineEncryptors.get(machineId);
+    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    return machineReadFile(requireSocket(), machineId, encryptor, path);
+  },
+
+  async writeMachineFile(machineId, path, content) {
+    const encryptor = machineEncryptors.get(machineId);
+    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    return machineWriteFile(requireSocket(), machineId, encryptor, path, content);
   },
 }));

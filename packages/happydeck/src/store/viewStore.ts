@@ -11,6 +11,7 @@ interface ViewState {
   /** Set once auto-focus has picked (or explicitly deferred) an initial session, so it never fights a later manual choice. */
   initialized: boolean;
   sidebarCollapsed: boolean;
+  settingsOpen: boolean;
   /** Click a sidebar session: jump to viewing just that one. */
   focusSession: (sessionId: string) => void;
   /** Drag a sidebar session into the panes area: add it alongside whatever's already open. */
@@ -19,13 +20,15 @@ interface ViewState {
   showGrid: () => void;
   markInitialized: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
-  toggleSidebar: () => void;
+  toggleSettings: () => void;
+  setSettingsOpen: (open: boolean) => void;
 }
 
 export const useViewStore = create<ViewState>((set) => ({
   mode: { type: 'grid' },
   initialized: false,
   sidebarCollapsed: typeof window !== 'undefined' ? window.innerWidth < 640 : false,
+  settingsOpen: false,
 
   focusSession: (sessionId) => set({ mode: { type: 'panes', sessionIds: [sessionId] }, initialized: true }),
 
@@ -49,5 +52,6 @@ export const useViewStore = create<ViewState>((set) => ({
   showGrid: () => set({ mode: { type: 'grid' }, initialized: true }),
   markInitialized: () => set({ initialized: true }),
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
-  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  toggleSettings: () => set((state) => ({ settingsOpen: !state.settingsOpen })),
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
 }));

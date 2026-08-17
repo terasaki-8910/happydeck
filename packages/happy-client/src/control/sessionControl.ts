@@ -1,4 +1,5 @@
 import type { Socket } from 'socket.io-client';
+import type { HttpClient } from '../api/http';
 import type { Decryptor, Encryptor } from '../crypto/encryptor';
 import { sessionRPC } from './rpc';
 
@@ -77,4 +78,16 @@ export interface SessionKillResponse {
 /** Kills the session's CLI process immediately. Irreversible — the process is gone, not just interrupted. */
 export function sessionKill(socket: Socket, sessionId: string, encryptor: SessionEncryptor): Promise<SessionKillResponse> {
   return sessionRPC(socket, sessionId, 'killSession', {}, encryptor);
+}
+
+/**
+ * Permanently deletes a session row from the server (plain bearer-authed
+ * REST, not an encrypted RPC to the agent — distinct from sessionKill,
+ * which only stops the CLI process). Irreversible; the session disappears
+ * from every device. Kill it first if it's still active — deleting a live
+ * session doesn't stop its process, it just removes the record pointing
+ * at it.
+ */
+export function sessionDelete(http: HttpClient, sessionId: string): Promise<void> {
+  return http.delete(`/v1/sessions/${sessionId}`);
 }

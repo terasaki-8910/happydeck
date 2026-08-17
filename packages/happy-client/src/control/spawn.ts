@@ -41,3 +41,39 @@ export async function machineSpawnNewSession(
     return { type: 'error', errorMessage: error instanceof Error ? error.message : 'Failed to spawn session' };
   }
 }
+
+/**
+ * Relaunches an offline session's CLI process in its original directory,
+ * continuing its existing Claude conversation (same sessionId, same
+ * history) rather than starting a fresh one. Requires the session to have
+ * an established Claude session id already (i.e. it had at least one real
+ * turn before going offline — confirmed via a disposable test session:
+ * a session killed before its first turn completes has nothing to resume).
+ *
+ * Confirmed empirically that a business-logic failure here comes back as
+ * a bare `{error: string}` (no `type` field) — NOT the same shape as
+ * spawn's `{type:'error', errorMessage}` — so it's normalized here rather
+ * than trusting the RPC's raw shape.
+ */
+export async function machineResumeSession(
+  socket: Socket,
+  encryptor: Encryptor & Decryptor,
+  machineId: string,
+  sessionId: string,
+): Promise<SpawnSessionResult> {
+  try {
+    const result = await machineRPC<SpawnSessionResult | { error: string }, { sessionId: string }>(
+      socket,
+      machineId,
+      'resume-happy-session',
+      { sessionId },
+      encryptor,
+    );
+    if ('error' in result) {
+      return { type: 'error', errorMessage: result.error };
+    }
+    return result;
+  } catch (error) {
+    return { type: 'error', errorMessage: error instanceof Error ? error.message : 'Failed to resume session' };
+  }
+}

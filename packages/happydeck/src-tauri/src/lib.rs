@@ -34,6 +34,16 @@ fn get_credentials() -> Result<Option<StoredCredentials>, String> {
     }
 }
 
+/// Saves Happy account credentials to the macOS Keychain — the write side
+/// of get_credentials, used by the in-app QR device-link flow so linking
+/// never requires the Node verification scripts/terminal.
+#[tauri::command]
+fn set_credentials(credentials: StoredCredentials) -> Result<(), String> {
+    let entry = Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT).map_err(|e| e.to_string())?;
+    let raw = serde_json::to_string(&credentials).map_err(|e| e.to_string())?;
+    entry.set_password(&raw).map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Deserialize)]
 struct HappyCliSettings {
     #[serde(rename = "machineId")]
@@ -63,7 +73,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![get_credentials, get_local_machine_id])
+        .invoke_handler(tauri::generate_handler![get_credentials, set_credentials, get_local_machine_id])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

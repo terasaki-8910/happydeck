@@ -56,4 +56,14 @@ export class HttpClient {
     }
     return (await response.json()) as T;
   }
+
+  /** Some DELETE endpoints (e.g. session delete) respond 204/empty — tolerate that instead of forcing response.json(). */
+  async delete<T = void>(path: string): Promise<T> {
+    const response = await this.request(path, { method: 'DELETE' });
+    if (!response.ok) {
+      throw new HttpError(response.status, await safeText(response));
+    }
+    const text = await safeText(response);
+    return (text ? JSON.parse(text) : undefined) as T;
+  }
 }

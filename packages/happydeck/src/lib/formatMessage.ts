@@ -21,6 +21,19 @@ const TOOL_DETAIL_KEYS: Record<string, string[]> = {
   Agent: ['description', 'prompt'],
 };
 
+// Session-envelope event types that carry no human-readable content of
+// their own — pure protocol bookkeeping, not worth a transcript line.
+const HIDDEN_SESSION_EVENTS = new Set(['turn-start', 'turn-end', 'tool-call-end', 'start', 'stop']);
+// Tool calls that are metadata side-effects (setting the chat title), not
+// something worth showing as a turn in the conversation.
+const HIDDEN_TOOL_NAMES = new Set(['mcp__happy__change_title']);
+
+export type RenderablePart =
+  | { kind: 'text'; text: string }
+  | { kind: 'tool-call'; label: string; detail: string | null; description: string | null }
+  | { kind: 'file'; name: string }
+  | { kind: 'raw'; text: string };
+
 function toolCallDetail(name: string, args: Record<string, unknown>): string | null {
   if (name === 'TodoWrite' && Array.isArray(args.todos)) {
     return `${args.todos.length} todo${args.todos.length === 1 ? '' : 's'}`;
@@ -29,81 +42,71 @@ function toolCallDetail(name: string, args: Record<string, unknown>): string | n
   for (const key of keys) {
     const value = args[key];
     if (typeof value === 'string' && value.trim()) {
-      return truncate(value.trim(), 160);
+      return truncate(value.trim(), 220);
     }
   }
   return null;
 }
 
-function toolCallSummary(ev: Record<string, unknown>): string {
+function toolCallPart(ev: Record<string, unknown>): RenderablePart {
   const name = typeof ev.name === 'string' ? ev.name : 'tool';
   const label = typeof ev.title === 'string' && ev.title ? ev.title : name;
   const args = (ev.args ?? {}) as Record<string, unknown>;
   const detail = toolCallDetail(name, args);
-  return detail ? `[${label}] ${detail}` : `[${label}]`;
+  const description = typeof ev.description === 'string' && ev.description.trim() ? ev.description.trim() : null;
+  return { kind: 'tool-call', label, detail, description };
 }
 
-/** Session-envelope event types that carry no human-readable content of their own — pure protocol bookkeeping, not worth a transcript line. */
-const HIDDEN_SESSION_EVENTS = new Set(['turn-start', 'turn-end', 'tool-call-end', 'start', 'stop']);
-
-/** Whether this message is worth a line in the transcript at all. */
-export function isRenderableMessage(content: unknown): boolean {
+/**
+ * Parses a decrypted message's content (legacy user/agent shape or the
+ * newer session-envelope shape) into a renderable part, or null if it's
+ * pure protocol noise (turn markers, the change-title side effect) not
+ * worth a line in the transcript.
+ */
+export function renderablePart(content: unknown): RenderablePart | null {
   if (content === null || content === undefined) {
-    return true; // "(failed to decrypt)" is worth showing
+    return { kind: 'raw', text: '(failed to decrypt)' };
   }
   if (typeof content !== 'object') {
-    return true;
-  }
-  const record = content as Record<string, unknown>;
-  if (record.role === 'session') {
-    const inner = record.content as Record<string, unknown> | undefined;
-    const ev = inner?.ev as Record<string, unknown> | undefined;
-    return !HIDDEN_SESSION_EVENTS.has(String(ev?.t));
-  }
-  return true;
-}
-
-/** Renders a decrypted message's content (legacy user/agent shape or the newer session-envelope shape) as one readable line. */
-export function summarizeMessageContent(content: unknown): string {
-  if (content === null || content === undefined) {
-    return '(failed to decrypt)';
-  }
-  if (typeof content !== 'object') {
-    return String(content);
+    return { kind: 'raw', text: String(content) };
   }
   const record = content as Record<string, unknown>;
 
   if (record.role === 'user' || record.role === 'agent') {
     const inner = record.content as Record<string, unknown> | undefined;
     if (inner?.type === 'text' && typeof inner.text === 'string') {
-      return truncate(inner.text, 400);
+      return { kind: 'text', text: inner.text };
     }
     if ((inner?.type === 'tool-call' || inner?.type === 'tool_use') && typeof inner.name === 'string') {
+      if (HIDDEN_TOOL_NAMES.has(inner.name)) return null;
       const input = (inner.input ?? inner.args ?? {}) as Record<string, unknown>;
-      return toolCallSummary({ name: inner.name, args: input });
+      return toolCallPart({ name: inner.name, args: input });
     }
-    return `<${String(inner?.type ?? 'unknown')}>`;
+    return { kind: 'raw', text: `<${String(inner?.type ?? 'unknown')}>` };
   }
 
   if (record.role === 'session') {
     const inner = record.content as Record<string, unknown> | undefined;
     const ev = inner?.ev as Record<string, unknown> | undefined;
+    const evType = String(ev?.t);
+    if (HIDDEN_SESSION_EVENTS.has(evType)) return null;
     if (ev?.t === 'text' && typeof ev.text === 'string') {
-      return truncate(ev.text, 400);
+      return { kind: 'text', text: ev.text };
     }
     if (ev?.t === 'service' && typeof ev.text === 'string') {
-      return ev.text;
+      return { kind: 'raw', text: ev.text };
     }
     if (ev?.t === 'file' && typeof ev.name === 'string') {
-      return `[file] ${ev.name}`;
+      return { kind: 'file', name: ev.name };
     }
     if (ev?.t === 'tool-call-start') {
-      return toolCallSummary(ev);
+      if (typeof ev.name === 'string' && HIDDEN_TOOL_NAMES.has(ev.name)) return null;
+      return toolCallPart(ev);
     }
-    return `[${String(ev?.t ?? 'unknown')}]`;
+    return { kind: 'raw', text: `[${evType}]` };
   }
 
-  return truncate(JSON.stringify(content), 200);
+  return { kind: 'raw', text: truncate(JSON.stringify(content), 200) };
 }
 
 export function messageRole(content: unknown): 'user' | 'agent' | 'system' {
@@ -117,21 +120,4 @@ export function messageRole(content: unknown): 'user' | 'agent' | 'system' {
     }
   }
   return 'system';
-}
-
-/** true = render this line in the monospace font (code/commands/paths), false = normal prose font. */
-export function isCodeLikeMessage(content: unknown): boolean {
-  if (!content || typeof content !== 'object') {
-    return false;
-  }
-  const record = content as Record<string, unknown>;
-  const inner = record.content as Record<string, unknown> | undefined;
-  if (record.role === 'session') {
-    const ev = inner?.ev as Record<string, unknown> | undefined;
-    return ev?.t === 'tool-call-start' || ev?.t === 'file';
-  }
-  if (record.role === 'agent') {
-    return inner?.type === 'tool-call' || inner?.type === 'tool_use';
-  }
-  return false;
 }

@@ -1,7 +1,9 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES } from '../lib/agentOptions';
 import { downloadTranscript } from '../lib/exportTranscript';
-import { isCodeLikeMessage, isRenderableMessage, messageRole, summarizeMessageContent } from '../lib/formatMessage';
+import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
 import { deriveTitle } from '../lib/sessionTitle';
 import { type AgentState, type LiveSession, useHappyStore } from '../store/happyStore';
 import { useSelectionStore } from '../store/selectionStore';
@@ -62,7 +64,9 @@ export function SessionTile({
   const title = deriveTitle(session.metadata, session.messages) ?? path;
   const agentState = session.agentState as AgentState | null;
   const pendingRequests = Object.entries(agentState?.requests ?? {});
-  const visibleMessages = session.messages.filter((m) => isRenderableMessage(m.content));
+  const visibleMessages = session.messages
+    .map((message) => ({ message, part: renderablePart(message.content) }))
+    .filter((entry) => entry.part !== null) as { message: (typeof session.messages)[number]; part: RenderablePart }[];
 
   // Follow new output as it streams in, but only if the user hasn't scrolled
   // up to read history — never yank them back down mid-read. isNearBottomRef
@@ -242,13 +246,25 @@ export function SessionTile({
 
       <div className="tile-messages" ref={messagesRef} onScroll={handleMessagesScroll}>
         {visibleMessages.length === 0 && <p className="tile-empty">(no messages)</p>}
-        {visibleMessages.map((message) => {
+        {visibleMessages.map(({ message, part }) => {
           const role = messageRole(message.content);
           return (
             <div key={message.id} className={`message-row role-${role}`}>
-              <p className={`tile-message ${isCodeLikeMessage(message.content) ? 'tile-message-code' : ''}`}>
-                {summarizeMessageContent(message.content)}
-              </p>
+              {part.kind === 'text' ? (
+                <div className="tile-message tile-message-markdown">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
+                </div>
+              ) : part.kind === 'tool-call' ? (
+                <div className="tile-message tile-tool-call">
+                  <span className="tile-tool-call-label">{part.label}</span>
+                  {part.detail && <span className="tile-tool-call-detail">{part.detail}</span>}
+                  {part.description && <span className="tile-tool-call-description">{part.description}</span>}
+                </div>
+              ) : part.kind === 'file' ? (
+                <p className="tile-message tile-message-code">[file] {part.name}</p>
+              ) : (
+                <p className="tile-message">{part.text}</p>
+              )}
             </div>
           );
         })}
