@@ -1,17 +1,30 @@
-import { type DragEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Panel, type PanelImperativeHandle, Separator } from 'react-resizable-panels';
 import './App.css';
 import { BulkActionBar } from './components/BulkActionBar';
 import { LinkDeviceView } from './components/LinkDeviceView';
+import { PaneTreeView } from './components/PaneTreeView';
 import { SessionTile } from './components/SessionTile';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
 import { SESSION_DRAG_MIME } from './lib/dnd';
+import { type DropZone, insertAtZone, paneTreeSessionIds, zoneFromPointer } from './lib/paneTree';
 import { mostRecentSession } from './lib/sessionOrder';
 import { useHappyStore } from './store/happyStore';
 import { FONT_STACKS, useSettingsStore } from './store/settingsStore';
 import { useViewStore } from './store/viewStore';
 import { useWorkspaceStore } from './store/workspaceStore';
+
+// Placeholder sessionId standing in for whatever's being dragged, while
+// it's being dragged. dataTransfer.getData() only returns the real payload
+// on 'drop' (browsers withhold it during dragover for security), so the
+// live preview can't know which real session is coming — it doesn't need
+// to, since the ghost pane never reads session data.
+const DROP_PREVIEW_ID = '__drop_preview__';
+
+function DropPreviewGhost({ zone }: { zone: DropZone }) {
+  return <div className={`pane-drop-preview ${zone === 'center' ? 'pane-drop-preview-center' : ''}`}>{zone === 'center' ? 'drop to replace this pane' : `drop to split · ${zone}`}</div>;
+}
 
 function App() {
   const status = useHappyStore((s) => s.status);
@@ -26,16 +39,21 @@ function App() {
 
   const mode = useViewStore((s) => s.mode);
   const initialized = useViewStore((s) => s.initialized);
+  const activePaneSessionId = useViewStore((s) => s.activePaneSessionId);
   const sidebarCollapsed = useViewStore((s) => s.sidebarCollapsed);
   const settingsOpen = useViewStore((s) => s.settingsOpen);
   const focusSession = useViewStore((s) => s.focusSession);
-  const addPane = useViewStore((s) => s.addPane);
+  const addPaneAtZone = useViewStore((s) => s.addPaneAtZone);
+  const addPaneToRoot = useViewStore((s) => s.addPaneToRoot);
+  const setActivePane = useViewStore((s) => s.setActivePane);
   const removePane = useViewStore((s) => s.removePane);
   const setSidebarCollapsed = useViewStore((s) => s.setSidebarCollapsed);
   const toggleSettings = useViewStore((s) => s.toggleSettings);
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen);
 
-  const [dragOverPanes, setDragOverPanes] = useState(false);
+  const [hover, setHover] = useState<{ targetId: string; zone: DropZone } | null>(null);
+  const leafElsRef = useRef(new Map<string, HTMLElement>());
+  const rectsSnapshotRef = useRef<Map<string, DOMRect> | null>(null);
   const sidebarPanelRef = useRef<PanelImperativeHandle>(null);
   const font = useSettingsStore((s) => s.font);
 
@@ -76,36 +94,79 @@ function App() {
     return sessions.filter((s) => memberIds.has(s.id));
   }, [sessions, activeWorkspace]);
 
-  const paneSessionIds = mode.type === 'panes' ? mode.sessionIds : [];
-  const paneSessions = paneSessionIds.map((id) => sessions.find((s) => s.id === id)).filter((s) => s !== undefined);
-  const focusedSessionId = paneSessionIds.length === 1 ? paneSessionIds[0] : null;
+  const tree = mode.type === 'panes' ? mode.tree : null;
+  const paneSessionIds = paneTreeSessionIds(tree);
+  const displayTree = tree && hover ? insertAtZone(tree, hover.targetId, hover.zone, DROP_PREVIEW_ID) : tree;
 
-  const acceptPaneDrag = (event: DragEvent) => {
-    if (event.dataTransfer.types.includes(SESSION_DRAG_MIME)) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'copy';
+  const onPanesDragOver = (event: DragEvent) => {
+    if (!event.dataTransfer.types.includes(SESSION_DRAG_MIME)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+
+    // Snapshot every pane's rect once per drag gesture, the moment it first
+    // hovers the pane area — never re-measure afterward. Once a phantom
+    // preview pane is inserted the real DOM shrinks the pane it split, and
+    // measuring against that live (already-distorted) rect would make the
+    // zone flip-flop as the pointer sits still. The snapshot is the ground
+    // truth for the whole gesture; only clientX/clientY move.
+    if (!rectsSnapshotRef.current) {
+      rectsSnapshotRef.current = new Map([...leafElsRef.current.entries()].map(([id, el]) => [id, el.getBoundingClientRect()]));
+    }
+    const rects = rectsSnapshotRef.current;
+    const targetEntry = [...rects.entries()].find(
+      ([, rect]) => event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom,
+    );
+    if (!targetEntry) {
+      setHover(null);
+      return;
+    }
+    const [targetId, rect] = targetEntry;
+    const zone = zoneFromPointer((event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height);
+    setHover((prev) => (prev && prev.targetId === targetId && prev.zone === zone ? prev : { targetId, zone }));
+  };
+
+  const onPanesDragLeave = (event: DragEvent) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+      setHover(null);
+      rectsSnapshotRef.current = null;
     }
   };
 
-  const dropOntoPanes = (event: DragEvent) => {
+  const onPanesDrop = (event: DragEvent) => {
     event.preventDefault();
-    setDragOverPanes(false);
     const sessionId = event.dataTransfer.getData(SESSION_DRAG_MIME);
-    if (sessionId) addPane(sessionId);
+    const dropHover = hover;
+    setHover(null);
+    rectsSnapshotRef.current = null;
+    if (!sessionId) return;
+    if (dropHover) addPaneAtZone(dropHover.targetId, dropHover.zone, sessionId);
+    else addPaneToRoot(sessionId);
   };
 
-  const renderTile = (session: (typeof paneSessions)[number]) => (
-    <SessionTile
-      key={session.id}
-      session={session}
-      workspaces={workspaces}
-      activeWorkspaceId={activeWorkspaceId}
-      onAddToWorkspace={addSessionToWorkspace}
-      onRemoveFromWorkspace={removeSessionFromWorkspace}
-      variant="solo"
-      onClosePane={paneSessions.length > 1 ? () => removePane(session.id) : undefined}
-    />
-  );
+  const registerLeafRef = (sessionId: string, el: HTMLElement | null) => {
+    if (sessionId === DROP_PREVIEW_ID) return;
+    if (el) leafElsRef.current.set(sessionId, el);
+    else leafElsRef.current.delete(sessionId);
+  };
+
+  const renderLeaf = (sessionId: string) => {
+    if (sessionId === DROP_PREVIEW_ID) return <DropPreviewGhost zone={hover?.zone ?? 'center'} />;
+    const session = sessions.find((s) => s.id === sessionId);
+    if (!session) return <p className="app-message">That session is gone.</p>;
+    return (
+      <div className="pane-leaf-inner" onMouseDownCapture={() => setActivePane(sessionId)}>
+        <SessionTile
+          session={session}
+          workspaces={workspaces}
+          activeWorkspaceId={activeWorkspaceId}
+          onAddToWorkspace={addSessionToWorkspace}
+          onRemoveFromWorkspace={removeSessionFromWorkspace}
+          variant="solo"
+          onClosePane={paneSessionIds.length > 1 ? () => removePane(sessionId) : undefined}
+        />
+      </div>
+    );
+  };
 
   return (
     <>
@@ -120,7 +181,7 @@ function App() {
           collapsedSize={52}
           onResize={(size) => setSidebarCollapsed(size.inPixels <= 54)}
         >
-          <Sidebar sessions={sessions} focusedSessionId={focusedSessionId} panelRef={sidebarPanelRef} />
+          <Sidebar sessions={sessions} focusedSessionId={mode.type === 'panes' ? activePaneSessionId : null} panelRef={sidebarPanelRef} />
         </Panel>
 
         <Separator className="app-shell-separator" />
@@ -137,42 +198,10 @@ function App() {
 
             {status === 'ready' && sessions.length === 0 && <p className="app-message">No sessions found.</p>}
 
-            {status === 'ready' && sessions.length > 0 && mode.type === 'panes' && (
-              <Group
-                orientation="horizontal"
-                className="panes"
-                onDragOver={acceptPaneDrag}
-                onDragEnter={() => setDragOverPanes(true)}
-                onDragLeave={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragOverPanes(false);
-                }}
-                onDrop={dropOntoPanes}
-              >
-                {paneSessions.length === 0 && !dragOverPanes && (
-                  <Panel id="empty">
-                    <p className="app-message">That session is gone. Pick another from the sidebar, or drag one in.</p>
-                  </Panel>
-                )}
-                {paneSessions.map((session, index) => (
-                  <Fragment key={session.id}>
-                    {index > 0 && <Separator className="pane-separator" />}
-                    <Panel id={session.id} minSize={240}>
-                      {renderTile(session)}
-                    </Panel>
-                  </Fragment>
-                ))}
-                {/* A real Panel, not a CSS overlay — shows exactly how much
-                    space the dropped session will take, live, using the
-                    same proportional layout the drop will actually produce. */}
-                {dragOverPanes && (
-                  <>
-                    {paneSessions.length > 0 && <Separator className="pane-separator" />}
-                    <Panel id="drop-preview" minSize={160} defaultSize={paneSessions.length === 0 ? 100 : undefined}>
-                      <div className="pane-drop-preview">drop here to split</div>
-                    </Panel>
-                  </>
-                )}
-              </Group>
+            {status === 'ready' && sessions.length > 0 && mode.type === 'panes' && displayTree && (
+              <div className="panes" onDragOver={onPanesDragOver} onDragLeave={onPanesDragLeave} onDrop={onPanesDrop}>
+                <PaneTreeView node={displayTree} renderLeaf={renderLeaf} registerLeafRef={registerLeafRef} />
+              </div>
             )}
 
             {status === 'ready' && sessions.length > 0 && mode.type === 'grid' && (

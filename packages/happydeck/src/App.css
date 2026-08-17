@@ -640,18 +640,45 @@ body {
   padding: 16px 20px;
 }
 
-/* The panes Group fills the entire main content area — no outer padding,
+/* The panes area fills the entire main content area — no outer padding,
    no card border/radius, so a single pane reads as one continuous surface
    rather than a "window inside the window" (the flagship complaint this
-   fixed). Multiple panes are divided by draggable Separators, not gaps. */
+   fixed). It hosts the recursive PaneTreeView (nested Groups for splits,
+   or a lone .pane-leaf when there's just one pane). */
 .panes {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Rendered as an actual sibling Panel during drag-over, not a CSS overlay —
-   it occupies real layout space, so the existing panes visibly shrink to
-   make room exactly as they would after the drop. That's the "preview". */
+.pane-split {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.pane-leaf {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.pane-leaf-inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Rendered as an actual sibling pane during drag-over, not a CSS overlay —
+   it occupies real layout space at the exact zone the pointer is over
+   (edge = split there, center = replace), so existing panes visibly
+   resize to show precisely what the drop will produce. That's the
+   "preview": real layout, not a flat highlight. */
 .pane-drop-preview {
   height: 100%;
   display: flex;
@@ -664,6 +691,11 @@ body {
   color: var(--accent);
   font-size: 13px;
   font-weight: 500;
+  text-align: center;
+}
+
+.pane-drop-preview-center {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .tile {
@@ -1204,6 +1236,21 @@ body {
 .tile-composer button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.tile-composer-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.tile-composer-send:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .confirm-backdrop {

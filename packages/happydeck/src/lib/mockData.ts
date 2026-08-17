@@ -1,4 +1,4 @@
-import type { DecryptedMachine } from 'happy-client';
+import type { DecryptedMachine, ListDirectoryResult } from 'happy-client';
 import type { LiveSession } from '../store/happyStore';
 
 /**
@@ -48,7 +48,18 @@ export function mockSessions(): LiveSession[] {
       activeAt: now,
       createdAt: now - 600000,
       updatedAt: now,
-      metadata: { path: '/Users/dev/project/happydeck', host: 'MacBook-Air.local', permissionMode: 'default', modelMode: 'default', effortLevel: 'medium' },
+      metadata: {
+        path: '/Users/dev/project/happydeck',
+        host: 'MacBook-Air.local',
+        permissionMode: 'default',
+        modelMode: 'default',
+        effortLevel: 'medium',
+        slashCommands: ['compact', 'clear', 'review'],
+        mcpServers: [
+          { name: 'happy', status: 'connected' },
+          { name: 'playwright', status: 'connected' },
+        ],
+      },
       metadataVersion: 1,
       agentState: null,
       agentStateVersion: 1,
@@ -122,6 +133,30 @@ export function mockSessions(): LiveSession[] {
       messages: [titleMsg('m4-0', 1, now - 40000, 'Second pane for testing splits'), textMsg('m4-1', 2, 'agent', 'Ready.', now - 30000)],
     },
   ];
+}
+
+// A tiny fake filesystem for the SpawnPanel's directory browser in mock
+// mode — keyed by absolute path, each entry a list of subdirectory names.
+const MOCK_FILESYSTEM: Record<string, string[]> = {
+  '/Users/dev': ['project', 'Downloads', 'Documents'],
+  '/Users/dev/project': ['happydeck', 'multiMonitor', 'terasaki-8910.github.io'],
+  '/Users/dev/project/happydeck': ['packages', 'src'],
+  '/Users/dev/Downloads': [],
+  '/Users/dev/Documents': ['notes'],
+  'C:\\Users\\dev': ['project', 'Downloads'],
+  'C:\\Users\\dev\\project': ['gta5-modding'],
+  'C:\\Users\\dev\\Downloads': [],
+};
+
+export function mockListDirectory(path: string): ListDirectoryResult {
+  const children = MOCK_FILESYSTEM[path];
+  if (!children) {
+    return { success: false, error: `(mock) no such directory: ${path}` };
+  }
+  return {
+    success: true,
+    entries: children.map((name) => ({ name, type: 'directory', size: 0, modified: now })),
+  };
 }
 
 export function mockMachines(): DecryptedMachine[] {

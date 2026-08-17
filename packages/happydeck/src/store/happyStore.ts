@@ -36,7 +36,7 @@ import {
   updateSessionAgentModes,
   updateSessionSummary,
 } from 'happy-client';
-import { MOCK_ENABLED, mockMachines, mockSessions } from '../lib/mockData';
+import { MOCK_ENABLED, mockListDirectory, mockMachines, mockSessions } from '../lib/mockData';
 import { ensureNotificationPermission, notify } from '../lib/notifications';
 import { getLocalMachineId, getStoredCredentials } from '../lib/tauri';
 import { useSettingsStore } from './settingsStore';
@@ -357,6 +357,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   },
 
   async listMachineDirectory(machineId, path) {
+    if (MOCK_ENABLED) return mockListDirectory(path);
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
     return machineListDirectory(requireSocket(), machineId, encryptor, path);

@@ -21,10 +21,7 @@ function GearIcon() {
   );
 }
 
-// No repo remote is configured for this project yet — this points at the
-// upstream Happy protocol this app talks to. Swap for this project's own
-// repo URL once it has one.
-const GITHUB_URL = 'https://github.com/slopus/happy';
+const GITHUB_URL = 'https://github.com/terasaki-8910/happydeck';
 
 const NARROW_BREAKPOINT = 640;
 
@@ -189,7 +186,7 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
         <button
           type="button"
           className="sidebar-footer-icon"
-          title="Open the Happy protocol repo on GitHub"
+          title="Open this project on GitHub"
           onClick={() => openUrl(GITHUB_URL)}
         >
           <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
