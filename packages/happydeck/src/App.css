@@ -18,6 +18,9 @@
   --status-offline: #5a5a61;
 
   --font-mono: 'SF Mono', ui-monospace, 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+
+  --sidebar-width: 220px;
+  --sidebar-width-collapsed: 52px;
 }
 
 * {
@@ -39,33 +42,19 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.app {
+.app-shell {
+  height: 100%;
+  display: flex;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
   padding: 20px 24px;
-  gap: 20px;
-}
-
-.app-header {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-.app-header h1 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--text);
-}
-
-.app-subtitle {
-  color: var(--text-dim);
-  font-size: 12px;
+  gap: 16px;
 }
 
 .app-message {
@@ -84,6 +73,146 @@ body {
 
 .app-message-error {
   color: #f27272;
+}
+
+.sidebar {
+  flex-shrink: 0;
+  width: var(--sidebar-width);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-tile);
+  border-right: 1px solid var(--border);
+  transition: width 0.12s ease;
+}
+
+.sidebar-collapsed {
+  width: var(--sidebar-width-collapsed);
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-brand-mark {
+  color: var(--accent);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.sidebar-brand-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-collapse-toggle {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.sidebar-collapse-toggle:hover {
+  color: var(--text);
+}
+
+.sidebar-sessions {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 2px;
+}
+
+.sidebar-session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 7px 8px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-dim);
+}
+
+.sidebar-session:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.sidebar-session-active {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.sidebar-session-label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar-session-host {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.sidebar-session-title {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-empty {
+  padding: 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-github {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.sidebar-github:hover {
+  color: var(--text);
 }
 
 .toolbar {
@@ -255,6 +384,11 @@ body {
   gap: 0;
 }
 
+.tab-drop-target {
+  border-color: var(--accent);
+  background: rgba(240, 166, 60, 0.12);
+}
+
 .tab-label {
   background: none;
   border: none;
@@ -303,6 +437,12 @@ body {
   overflow-y: auto;
 }
 
+.solo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .tile {
   display: flex;
   flex-direction: column;
@@ -312,6 +452,12 @@ body {
   min-height: 220px;
   max-height: 420px;
   overflow: hidden;
+}
+
+.tile-solo {
+  flex: 1;
+  max-height: none;
+  max-width: 900px;
 }
 
 .tile-selected {
@@ -369,21 +515,13 @@ body {
   padding: 1px 5px;
 }
 
-.tile-path {
+.tile-title {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
   color: var(--text);
-}
-
-.tile-status-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
-  flex-shrink: 0;
 }
 
 .tile-workspace-remove {
@@ -569,4 +707,59 @@ body {
 .tile-composer button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.confirm-dialog {
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  width: 360px;
+  max-width: calc(100vw - 40px);
+}
+
+.confirm-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.confirm-body {
+  margin: 0 0 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-actions button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.confirm-danger {
+  color: #f27272;
+  border-color: #4a2b2b;
 }

@@ -27,6 +27,25 @@ export interface DecryptedMessage {
   content: unknown | null;
 }
 
+async function fetchAndDecrypt(
+  http: HttpClient,
+  encryptor: Encryptor & Decryptor,
+  sessionId: string,
+  query: URLSearchParams,
+): Promise<DecryptedMessage[]> {
+  const response = await http.get<MessagesResponse>(`/v3/sessions/${sessionId}/messages?${query.toString()}`);
+
+  const encryptedBlobs = response.messages.map((message) => decodeBase64(message.content.c, 'base64'));
+  const decryptedContents = await encryptor.decrypt(encryptedBlobs);
+
+  return response.messages.map((message, index) => ({
+    id: message.id,
+    seq: message.seq,
+    createdAt: message.createdAt,
+    content: decryptedContents[index] ?? null,
+  }));
+}
+
 /**
  * Fetches the newest `limit` messages of a session (GET .../messages?before_seq=<max>)
  * and decrypts them with the session's own encryptor (get it from
@@ -39,19 +58,25 @@ export async function fetchLatestMessages(
   sessionId: string,
   limit = 20,
 ): Promise<DecryptedMessage[]> {
-  const query = new URLSearchParams({
-    before_seq: String(SEQ_BACKWARD_INITIAL_SENTINEL),
-    limit: String(limit),
-  });
-  const response = await http.get<MessagesResponse>(`/v3/sessions/${sessionId}/messages?${query.toString()}`);
+  return fetchAndDecrypt(
+    http,
+    encryptor,
+    sessionId,
+    new URLSearchParams({ before_seq: String(SEQ_BACKWARD_INITIAL_SENTINEL), limit: String(limit) }),
+  );
+}
 
-  const encryptedBlobs = response.messages.map((message) => decodeBase64(message.content.c, 'base64'));
-  const decryptedContents = await encryptor.decrypt(encryptedBlobs);
-
-  return response.messages.map((message, index) => ({
-    id: message.id,
-    seq: message.seq,
-    createdAt: message.createdAt,
-    content: decryptedContents[index] ?? null,
-  }));
+/**
+ * Fetches the OLDEST `limit` messages of a session (GET .../messages?after_seq=0).
+ * Session titles (the `mcp__happy__change_title` tool call) are almost
+ * always set within the first few agent turns, so this is the cheap way to
+ * find one without paging through a session's entire history.
+ */
+export async function fetchEarliestMessages(
+  http: HttpClient,
+  encryptor: Encryptor & Decryptor,
+  sessionId: string,
+  limit = 10,
+): Promise<DecryptedMessage[]> {
+  return fetchAndDecrypt(http, encryptor, sessionId, new URLSearchParams({ after_seq: '0', limit: String(limit) }));
 }

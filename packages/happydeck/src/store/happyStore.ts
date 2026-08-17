@@ -14,6 +14,7 @@ import {
   type SpawnSessionOptions,
   type SpawnSessionResult,
   decodeBase64,
+  fetchEarliestMessages,
   fetchLatestMessages,
   fetchMachines,
   fetchSessions,
@@ -28,6 +29,7 @@ import {
   updateSessionAgentModes,
 } from 'happy-client';
 import { ensureNotificationPermission, notify } from '../lib/notifications';
+import { extractTitle } from '../lib/sessionTitle';
 import { getLocalMachineId, getStoredCredentials } from '../lib/tauri';
 
 const SESSION_EVENT_TITLES: Record<string, string> = {
@@ -53,6 +55,8 @@ export interface AgentState {
 export interface LiveSession extends DecryptedSession {
   messages: DecryptedMessage[];
   thinking: boolean;
+  /** From the `mcp__happy__change_title` tool call, if the agent ever set one. Falls back to the path in the UI. */
+  title: string | null;
 }
 
 interface HappyStoreState {
@@ -160,8 +164,16 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
       const liveSessions: LiveSession[] = await Promise.all(
         allSessions.map(async (session) => {
           const encryptor = sessionEncryptors.get(session.id)!;
-          const messages = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, session.id, 20));
-          return { ...session, messages: [...messages].reverse(), thinking: false };
+          const [latest, earliest] = await Promise.all([
+            withTokenRefresh(() => fetchLatestMessages(http!, encryptor, session.id, 20)),
+            withTokenRefresh(() => fetchEarliestMessages(http!, encryptor, session.id, 10)),
+          ]);
+          return {
+            ...session,
+            messages: [...latest].reverse(),
+            thinking: false,
+            title: extractTitle([...earliest, ...latest]),
+          };
         }),
       );
 
@@ -181,15 +193,15 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
             const encryptor = sessionEncryptors.get(sid);
             if (!encryptor) return; // not one of this machine's tracked sessions
             encryptor.decrypt([decodeBase64(message.content.c, 'base64')]).then(([content]) => {
+              const newMessage = { id: message.id, seq: message.seq, createdAt: message.createdAt, content: content ?? null };
+              const newTitle = extractTitle([newMessage]);
               set((state) => ({
                 sessions: state.sessions.map((s) =>
                   s.id === sid
                     ? {
                         ...s,
-                        messages: [
-                          ...s.messages,
-                          { id: message.id, seq: message.seq, createdAt: message.createdAt, content: content ?? null },
-                        ],
+                        messages: [...s.messages, newMessage],
+                        title: newTitle ?? s.title,
                       }
                     : s,
                 ),
@@ -238,11 +250,24 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
               if (!found) return;
               sessionEncryptors.set(found.id, encryption.openEncryption(found.dataKey));
               const encryptor = sessionEncryptors.get(found.id)!;
-              const messages = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, found.id, 20));
+              const [latest, earliest] = await Promise.all([
+                withTokenRefresh(() => fetchLatestMessages(http!, encryptor, found.id, 20)),
+                withTokenRefresh(() => fetchEarliestMessages(http!, encryptor, found.id, 10)),
+              ]);
               set((state) =>
                 state.sessions.some((s) => s.id === found.id)
                   ? state
-                  : { sessions: [...state.sessions, { ...found, messages: [...messages].reverse(), thinking: false }] },
+                  : {
+                      sessions: [
+                        ...state.sessions,
+                        {
+                          ...found,
+                          messages: [...latest].reverse(),
+                          thinking: false,
+                          title: extractTitle([...earliest, ...latest]),
+                        },
+                      ],
+                    },
               );
             });
             return;

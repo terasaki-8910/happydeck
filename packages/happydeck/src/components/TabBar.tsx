@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { type DragEvent, useState } from 'react';
+import { useViewStore } from '../store/viewStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
+
+const DRAG_MIME = 'application/x-happydeck-session-id';
 
 export function TabBar() {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
@@ -7,9 +10,12 @@ export function TabBar() {
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
   const createWorkspace = useWorkspaceStore((s) => s.createWorkspace);
   const deleteWorkspace = useWorkspaceStore((s) => s.deleteWorkspace);
+  const addSessionToWorkspace = useWorkspaceStore((s) => s.addSessionToWorkspace);
+  const showGrid = useViewStore((s) => s.showGrid);
 
   const [creating, setCreating] = useState(false);
   const [draftName, setDraftName] = useState('');
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const submitNewWorkspace = () => {
     const name = draftName.trim();
@@ -20,15 +26,55 @@ export function TabBar() {
     setCreating(false);
   };
 
+  const acceptDrag = (event: DragEvent) => {
+    if (event.dataTransfer.types.includes(DRAG_MIME)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const dropOntoWorkspace = (event: DragEvent, workspaceId: string) => {
+    event.preventDefault();
+    setDragOverId(null);
+    const sessionId = event.dataTransfer.getData(DRAG_MIME);
+    if (sessionId) {
+      addSessionToWorkspace(workspaceId, sessionId);
+      setActiveWorkspace(workspaceId);
+      showGrid();
+    }
+  };
+
   return (
     <nav className="tab-bar">
-      <button type="button" className={`tab ${activeWorkspaceId === null ? 'tab-active' : ''}`} onClick={() => setActiveWorkspace(null)}>
+      <button
+        type="button"
+        className={`tab ${activeWorkspaceId === null ? 'tab-active' : ''}`}
+        onClick={() => {
+          setActiveWorkspace(null);
+          showGrid();
+        }}
+      >
         All
       </button>
 
       {workspaces.map((workspace) => (
-        <div key={workspace.id} className={`tab tab-workspace ${activeWorkspaceId === workspace.id ? 'tab-active' : ''}`}>
-          <button type="button" className="tab-label" onClick={() => setActiveWorkspace(workspace.id)}>
+        <div
+          key={workspace.id}
+          className={`tab tab-workspace ${activeWorkspaceId === workspace.id ? 'tab-active' : ''} ${dragOverId === workspace.id ? 'tab-drop-target' : ''}`}
+          onDragOver={acceptDrag}
+          onDragEnter={() => setDragOverId(workspace.id)}
+          onDragLeave={() => setDragOverId((current) => (current === workspace.id ? null : current))}
+          onDrop={(event) => dropOntoWorkspace(event, workspace.id)}
+        >
+          <button
+            type="button"
+            className="tab-label"
+            title="Click to view. Drag a session here from the sidebar to add it."
+            onClick={() => {
+              setActiveWorkspace(workspace.id);
+              showGrid();
+            }}
+          >
             {workspace.name}
           </button>
           <button

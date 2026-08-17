@@ -4,6 +4,7 @@ import { messageRole, summarizeMessageContent } from '../lib/formatMessage';
 import { type AgentState, type LiveSession, useHappyStore } from '../store/happyStore';
 import { useSelectionStore } from '../store/selectionStore';
 import type { Workspace } from '../store/workspaceStore';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface SessionTileProps {
   session: LiveSession;
@@ -12,6 +13,8 @@ interface SessionTileProps {
   activeWorkspaceId: string | null;
   onAddToWorkspace: (workspaceId: string, sessionId: string) => void;
   onRemoveFromWorkspace: (workspaceId: string, sessionId: string) => void;
+  /** 'solo' renders larger, as the single focused session (see App.tsx / Sidebar.tsx). Defaults to 'grid'. */
+  variant?: 'grid' | 'solo';
 }
 
 function statusOf(session: LiveSession): { label: string; className: string } {
@@ -24,7 +27,14 @@ function statusOf(session: LiveSession): { label: string; className: string } {
   return { label: 'online', className: 'status-online' };
 }
 
-export function SessionTile({ session, workspaces, activeWorkspaceId, onAddToWorkspace, onRemoveFromWorkspace }: SessionTileProps) {
+export function SessionTile({
+  session,
+  workspaces,
+  activeWorkspaceId,
+  onAddToWorkspace,
+  onRemoveFromWorkspace,
+  variant = 'grid',
+}: SessionTileProps) {
   const sendMessage = useHappyStore((s) => s.sendMessage);
   const setAgentModes = useHappyStore((s) => s.setAgentModes);
   const allowRequest = useHappyStore((s) => s.allowRequest);
@@ -37,10 +47,12 @@ export function SessionTile({ session, workspaces, activeWorkspaceId, onAddToWor
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmingKill, setConfirmingKill] = useState(false);
 
   const status = statusOf(session);
   const metadata = session.metadata as { path?: string; host?: string; permissionMode?: string; modelMode?: string; effortLevel?: string } | null;
   const path = metadata?.path ?? session.id;
+  const title = session.title ?? path;
   const agentState = session.agentState as AgentState | null;
   const pendingRequests = Object.entries(agentState?.requests ?? {});
 
@@ -64,29 +76,28 @@ export function SessionTile({ session, workspaces, activeWorkspaceId, onAddToWor
     runAction(() => sendMessage(session.id, text));
   };
 
-  const handleKill = () => {
-    if (!window.confirm(`Kill this session's process? This cannot be undone.\n\n${path}`)) {
-      return;
-    }
+  const handleKillConfirmed = () => {
+    setConfirmingKill(false);
     runAction(() => killSession(session.id));
   };
 
   return (
-    <section className={`tile ${isSelected ? 'tile-selected' : ''}`}>
+    <section className={`tile tile-${variant} ${isSelected ? 'tile-selected' : ''}`}>
       <header className="tile-header">
-        <input
-          type="checkbox"
-          className="tile-select"
-          checked={isSelected}
-          onChange={() => toggleSelected(session.id)}
-          title="Select for bulk actions"
-        />
-        <span className={`status-dot ${status.className}`} />
+        {variant === 'grid' && (
+          <input
+            type="checkbox"
+            className="tile-select"
+            checked={isSelected}
+            onChange={() => toggleSelected(session.id)}
+            title="Select for bulk actions"
+          />
+        )}
+        <span className={`status-dot ${status.className}`} title={`status: ${status.label}`} />
         {metadata?.host && <span className="tile-host">{metadata.host}</span>}
-        <span className="tile-path" title={path}>
-          {path}
+        <span className="tile-title" title={path}>
+          {title}
         </span>
-        <span className="tile-status-label">{status.label}</span>
         {activeWorkspaceId ? (
           <button
             type="button"
@@ -154,10 +165,21 @@ export function SessionTile({ session, workspaces, activeWorkspaceId, onAddToWor
             </option>
           ))}
         </select>
-        <button type="button" disabled={busy} onClick={() => runAction(() => abortSession(session.id))}>
+        <button
+          type="button"
+          disabled={busy}
+          title="Stop the current tool use and have the agent wait for you — the session process keeps running."
+          onClick={() => runAction(() => abortSession(session.id))}
+        >
           abort
         </button>
-        <button type="button" className="tile-kill" disabled={busy} onClick={handleKill}>
+        <button
+          type="button"
+          className="tile-kill"
+          disabled={busy}
+          title="Kill the session's CLI process immediately — irreversible, not just an interrupt."
+          onClick={() => setConfirmingKill(true)}
+        >
           kill
         </button>
       </div>
@@ -201,6 +223,17 @@ export function SessionTile({ session, workspaces, activeWorkspaceId, onAddToWor
           send
         </button>
       </form>
+
+      {confirmingKill && (
+        <ConfirmDialog
+          title="Kill this session?"
+          body={`This immediately terminates the CLI process on the machine it's running on — not an interrupt, the process is gone. Cannot be undone.\n\n${title}`}
+          confirmLabel="kill process"
+          danger
+          onConfirm={handleKillConfirmed}
+          onCancel={() => setConfirmingKill(false)}
+        />
+      )}
     </section>
   );
 }
