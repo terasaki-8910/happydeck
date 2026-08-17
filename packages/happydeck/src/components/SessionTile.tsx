@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { downloadTranscript } from '../lib/exportTranscript';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
+import { type TranslationKey, useT } from '../lib/i18n';
 import { deriveTitle } from '../lib/sessionTitle';
 import { type AgentState, type LiveSession, useHappyStore } from '../store/happyStore';
 import { useSelectionStore } from '../store/selectionStore';
@@ -24,14 +25,14 @@ interface SessionTileProps {
   onClosePane?: () => void;
 }
 
-function statusOf(session: LiveSession): { label: string; className: string } {
+function statusOf(session: LiveSession): { labelKey: TranslationKey; className: string } {
   if (!session.active) {
-    return { label: 'offline', className: 'status-offline' };
+    return { labelKey: 'statusOffline', className: 'status-offline' };
   }
   if (session.thinking) {
-    return { label: 'thinking', className: 'status-thinking' };
+    return { labelKey: 'statusThinking', className: 'status-thinking' };
   }
-  return { label: 'online', className: 'status-online' };
+  return { labelKey: 'statusOnline', className: 'status-online' };
 }
 
 /** A tool-call line collapses to just its label by default — text is the point, tool activity is secondary. */
@@ -70,6 +71,7 @@ export function SessionTile({
   variant = 'grid',
   onClosePane,
 }: SessionTileProps) {
+  const t = useT();
   const sendMessage = useHappyStore((s) => s.sendMessage);
   const setAgentModes = useHappyStore((s) => s.setAgentModes);
   const renameSession = useHappyStore((s) => s.renameSession);
@@ -159,7 +161,7 @@ export function SessionTile({
             title="Select for bulk actions"
           />
         )}
-        <span className={`status-dot ${status.className}`} title={`status: ${status.label}`} />
+        <span className={`status-dot ${status.className}`} title={t(status.labelKey)} />
         {metadata?.host && <span className="tile-host">{metadata.host}</span>}
         {renamingTitle ? (
           <form className="tile-title-rename" onSubmit={submitTitleRename}>
@@ -250,7 +252,7 @@ export function SessionTile({
       {actionError && <p className="tile-action-error">{actionError}</p>}
 
       <div className="tile-messages" ref={messagesRef} onScroll={handleMessagesScroll}>
-        {visibleMessages.length === 0 && <p className="tile-empty">(no messages)</p>}
+        {visibleMessages.length === 0 && <p className="tile-empty">{t('noMessages')}</p>}
         {visibleMessages.map(({ message, part }) => {
           const role = messageRole(message.content);
           return (
@@ -289,11 +291,11 @@ export function SessionTile({
             className="tile-composer-input"
             value={draft}
             disabled={busy}
-            placeholder="message this session…"
+            placeholder={t('messagePlaceholder')}
             onChange={(event) => setDraft(event.target.value)}
           />
           <button type="submit" disabled={busy || !draft.trim()}>
-            send
+            {t('send')}
           </button>
         </form>
       </div>

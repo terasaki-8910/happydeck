@@ -24,13 +24,22 @@ export interface NotificationPrefs {
   question: boolean;
 }
 
+export type Language = 'en' | 'ja';
+
+export const LANGUAGE_LABELS: Record<Language, string> = {
+  en: 'English',
+  ja: '日本語',
+};
+
 interface SettingsState {
   font: FontChoice;
+  language: Language;
   defaultPermissionMode: string;
   defaultModelMode: string;
   defaultEffortLevel: string;
   notify: NotificationPrefs;
   setFont: (font: FontChoice) => void;
+  setLanguage: (language: Language) => void;
   setDefaultAgentOptions: (opts: { permissionMode?: string; modelMode?: string; effortLevel?: string }) => void;
   setNotifyPref: (key: keyof NotificationPrefs, value: boolean) => void;
 }
@@ -39,11 +48,13 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       font: 'system',
+      language: 'en',
       defaultPermissionMode: 'default',
       defaultModelMode: 'default',
       defaultEffortLevel: 'medium',
       notify: { done: true, permission: true, question: true },
       setFont: (font) => set({ font }),
+      setLanguage: (language) => set({ language }),
       setDefaultAgentOptions: (opts) =>
         set((state) => ({
           defaultPermissionMode: opts.permissionMode ?? state.defaultPermissionMode,

@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { useT } from '../lib/i18n';
 import type { LiveSession } from '../store/happyStore';
 import type { Workspace } from '../store/workspaceStore';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -17,6 +18,7 @@ interface SessionMenuProps {
 
 /** The "⋮" menu on a sidebar session row: pin, rename, add to a workspace, resume (offline only), delete. */
 export function SessionMenu({ session, title, pinned, workspaces, onTogglePin, onAddToWorkspace, onRename, onDelete, onResume }: SessionMenuProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState(title);
@@ -111,10 +113,10 @@ export function SessionMenu({ session, title, pinned, workspaces, onTogglePin, o
           ) : (
             <>
               <button type="button" onClick={() => onTogglePin()}>
-                {pinned ? 'Unpin' : 'Pin'}
+                {pinned ? t('unpin') : t('pin')}
               </button>
               <button type="button" onClick={() => setRenaming(true)}>
-                Rename…
+                {t('rename')}
               </button>
               {!session.active && (
                 <button
@@ -129,12 +131,12 @@ export function SessionMenu({ session, title, pinned, workspaces, onTogglePin, o
                     }).then((ok) => ok && setOpen(false))
                   }
                 >
-                  Resume
+                  {t('resume')}
                 </button>
               )}
               {workspaces.length > 0 && (
                 <div className="session-menu-section">
-                  <span className="session-menu-label">Add to project</span>
+                  <span className="session-menu-label">{t('addToProject')}</span>
                   {workspaces.map((workspace) => (
                     <button
                       key={workspace.id}
@@ -159,7 +161,7 @@ export function SessionMenu({ session, title, pinned, workspaces, onTogglePin, o
                   setOpen(false);
                 }}
               >
-                Delete
+                {t('delete')}
               </button>
             </>
           )}

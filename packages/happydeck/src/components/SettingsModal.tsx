@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES } from '../lib/agentOptions';
+import { type TranslationKey, useT } from '../lib/i18n';
 import { joinPath } from '../lib/paths';
 import { useHappyStore } from '../store/happyStore';
-import { FONT_LABELS, type FontChoice, type NotificationPrefs, useSettingsStore } from '../store/settingsStore';
+import { FONT_LABELS, type FontChoice, LANGUAGE_LABELS, type Language, type NotificationPrefs, useSettingsStore } from '../store/settingsStore';
+import { ToggleSwitch } from './ToggleSwitch';
 
 type Section = 'general' | 'account' | 'privacy' | 'claudemd';
 
-const SECTIONS: { id: Section; label: string }[] = [
-  { id: 'general', label: 'General' },
-  { id: 'account', label: 'Account' },
-  { id: 'privacy', label: 'Privacy' },
-  { id: 'claudemd', label: 'CLAUDE.md' },
+const SECTIONS: { id: Section; labelKey: TranslationKey }[] = [
+  { id: 'general', labelKey: 'settingsGeneral' },
+  { id: 'account', labelKey: 'settingsAccount' },
+  { id: 'privacy', labelKey: 'settingsPrivacy' },
+  { id: 'claudemd', labelKey: 'settingsClaudeMd' },
 ];
 
 interface SettingsModalProps {
@@ -19,6 +21,7 @@ interface SettingsModalProps {
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const [section, setSection] = useState<Section>('general');
+  const t = useT();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -39,7 +42,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               className={`settings-nav-item ${section === s.id ? 'settings-nav-item-active' : ''}`}
               onClick={() => setSection(s.id)}
             >
-              {s.label}
+              {t(s.labelKey)}
             </button>
           ))}
         </nav>
@@ -58,8 +61,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 }
 
 function GeneralSection() {
+  const t = useT();
   const font = useSettingsStore((s) => s.font);
   const setFont = useSettingsStore((s) => s.setFont);
+  const language = useSettingsStore((s) => s.language);
+  const setLanguage = useSettingsStore((s) => s.setLanguage);
   const defaultPermissionMode = useSettingsStore((s) => s.defaultPermissionMode);
   const defaultModelMode = useSettingsStore((s) => s.defaultModelMode);
   const defaultEffortLevel = useSettingsStore((s) => s.defaultEffortLevel);
@@ -67,10 +73,22 @@ function GeneralSection() {
 
   return (
     <div className="settings-section">
-      <h2>General</h2>
+      <h2>{t('settingsGeneral')}</h2>
 
       <label className="settings-field">
-        <span>Font</span>
+        <span>{t('language')}</span>
+        <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
+          {(Object.keys(LANGUAGE_LABELS) as Language[]).map((key) => (
+            <option key={key} value={key}>
+              {LANGUAGE_LABELS[key]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="settings-hint">Translates the app's own UI chrome. Session content, paths, and error text stay as-is.</p>
+
+      <label className="settings-field">
+        <span>{t('font')}</span>
         <select value={font} onChange={(event) => setFont(event.target.value as FontChoice)}>
           {(Object.keys(FONT_LABELS) as FontChoice[]).map((key) => (
             <option key={key} value={key}>
@@ -119,48 +137,75 @@ function GeneralSection() {
 }
 
 function AccountSection() {
+  const t = useT();
   const localMachineId = useHappyStore((s) => s.localMachineId);
   const machines = useHappyStore((s) => s.machines);
 
   return (
     <div className="settings-section">
-      <h2>Account</h2>
+      <h2>{t('settingsAccount')}</h2>
       <p className="settings-hint">
         happydeck reuses your existing Happy account — there's no separate login. The account is identified by the
         device-linked master secret stored in the macOS Keychain.
       </p>
-      <label className="settings-field">
-        <span>This machine</span>
-        <span className="settings-value">{localMachineId ?? 'unknown'}</span>
-      </label>
-      <label className="settings-field">
-        <span>Linked machines</span>
-        <span className="settings-value">{machines.length}</span>
-      </label>
+
+      <h3>{t('linkedMachines')}</h3>
+      <table className="settings-machines-table">
+        <thead>
+          <tr>
+            <th>Device</th>
+            <th>Platform</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {machines.map((machine) => {
+            const meta = machine.metadata as { host?: string; platform?: string } | null;
+            return (
+              <tr key={machine.id}>
+                <td>
+                  {meta?.host ?? machine.id}
+                  {machine.id === localMachineId && <span className="settings-this-machine"> (this machine)</span>}
+                </td>
+                <td>{meta?.platform ?? '—'}</td>
+                <td>
+                  <span className={`status-dot ${machine.active ? 'status-online' : 'status-offline'}`} />
+                  {machine.active ? t('statusOnline') : t('statusOffline')}
+                </td>
+              </tr>
+            );
+          })}
+          {machines.length === 0 && (
+            <tr>
+              <td colSpan={3} className="settings-hint">
+                no machines found
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 function PrivacySection() {
+  const t = useT();
   const notify = useSettingsStore((s) => s.notify);
   const setNotifyPref = useSettingsStore((s) => s.setNotifyPref);
 
-  const rows: { key: keyof NotificationPrefs; label: string }[] = [
-    { key: 'done', label: 'Session finished' },
-    { key: 'permission', label: 'Permission needed' },
-    { key: 'question', label: 'Question from agent' },
+  const rows: { key: keyof NotificationPrefs; labelKey: TranslationKey }[] = [
+    { key: 'done', labelKey: 'sessionFinished' },
+    { key: 'permission', labelKey: 'permissionNeeded' },
+    { key: 'question', labelKey: 'questionFromAgent' },
   ];
 
   return (
     <div className="settings-section">
-      <h2>Privacy</h2>
-      <h3>Notifications</h3>
+      <h2>{t('settingsPrivacy')}</h2>
+      <h3>{t('notifications')}</h3>
       <p className="settings-hint">Which session events trigger a native Mac notification.</p>
       {rows.map((row) => (
-        <label key={row.key} className="settings-checkbox">
-          <input type="checkbox" checked={notify[row.key]} onChange={(event) => setNotifyPref(row.key, event.target.checked)} />
-          <span>{row.label}</span>
-        </label>
+        <ToggleSwitch key={row.key} checked={notify[row.key]} onChange={(value) => setNotifyPref(row.key, value)} label={t(row.labelKey)} />
       ))}
     </div>
   );
@@ -173,6 +218,7 @@ function ClaudeMdSection() {
 
   const [machineId, setMachineId] = useState('');
   const [content, setContent] = useState<string | null>(null);
+  const [isNewFile, setIsNewFile] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -185,6 +231,7 @@ function ClaudeMdSection() {
   const load = (id: string) => {
     setMachineId(id);
     setContent(null);
+    setIsNewFile(false);
     setError(null);
     setSaved(false);
     const machine = machines.find((m) => m.id === id);
@@ -194,8 +241,16 @@ function ClaudeMdSection() {
     setLoading(true);
     readMachineFile(id, filePath)
       .then((result) => {
-        if (result.success) setContent(result.content);
-        else setError(result.error);
+        if (result.success) {
+          setContent(result.content);
+        } else if (/ENOENT/i.test(result.error)) {
+          // No CLAUDE.md there yet — that's normal, not a failure. Start the
+          // editor empty so typing + save just creates the file.
+          setContent('');
+          setIsNewFile(true);
+        } else {
+          setError(result.error);
+        }
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -208,8 +263,12 @@ function ClaudeMdSection() {
     setSaved(false);
     writeMachineFile(machineId, path, content)
       .then((result) => {
-        if (result.success) setSaved(true);
-        else setError(result.error);
+        if (result.success) {
+          setSaved(true);
+          setIsNewFile(false);
+        } else {
+          setError(result.error);
+        }
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setSaving(false));
@@ -241,6 +300,7 @@ function ClaudeMdSection() {
 
       {loading && <p className="settings-hint">loading…</p>}
       {error && <p className="settings-error">{error}</p>}
+      {isNewFile && !loading && <p className="settings-hint">No CLAUDE.md there yet — start typing and save to create one.</p>}
 
       {content !== null && !loading && (
         <>

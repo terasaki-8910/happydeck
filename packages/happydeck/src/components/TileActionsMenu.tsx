@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '../lib/i18n';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface TileActionsMenuProps {
@@ -11,6 +12,7 @@ interface TileActionsMenuProps {
 
 /** The "⋮" menu in a session tile's header: abort / download / kill. Kill needs its own confirm. */
 export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill }: TileActionsMenuProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [confirmingKill, setConfirmingKill] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -56,7 +58,7 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill }: Ti
               setOpen(false);
             }}
           >
-            Abort
+            {t('abort')}
           </button>
           <button
             type="button"
@@ -66,7 +68,7 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill }: Ti
               setOpen(false);
             }}
           >
-            Download transcript
+            {t('downloadTranscript')}
           </button>
           <div className="session-menu-divider" />
           <button
@@ -78,7 +80,7 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill }: Ti
               setOpen(false);
             }}
           >
-            Kill process
+            {t('killProcess')}
           </button>
         </div>
       )}

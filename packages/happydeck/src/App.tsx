@@ -140,7 +140,7 @@ function App() {
             {status === 'ready' && sessions.length > 0 && mode.type === 'panes' && (
               <Group
                 orientation="horizontal"
-                className={`panes ${dragOverPanes ? 'panes-drop-target' : ''}`}
+                className="panes"
                 onDragOver={acceptPaneDrag}
                 onDragEnter={() => setDragOverPanes(true)}
                 onDragLeave={(event) => {
@@ -148,7 +148,7 @@ function App() {
                 }}
                 onDrop={dropOntoPanes}
               >
-                {paneSessions.length === 0 && (
+                {paneSessions.length === 0 && !dragOverPanes && (
                   <Panel id="empty">
                     <p className="app-message">That session is gone. Pick another from the sidebar, or drag one in.</p>
                   </Panel>
@@ -156,11 +156,22 @@ function App() {
                 {paneSessions.map((session, index) => (
                   <Fragment key={session.id}>
                     {index > 0 && <Separator className="pane-separator" />}
-                    <Panel id={session.id} minSize={320}>
+                    <Panel id={session.id} minSize={240}>
                       {renderTile(session)}
                     </Panel>
                   </Fragment>
                 ))}
+                {/* A real Panel, not a CSS overlay — shows exactly how much
+                    space the dropped session will take, live, using the
+                    same proportional layout the drop will actually produce. */}
+                {dragOverPanes && (
+                  <>
+                    {paneSessions.length > 0 && <Separator className="pane-separator" />}
+                    <Panel id="drop-preview" minSize={160} defaultSize={paneSessions.length === 0 ? 100 : undefined}>
+                      <div className="pane-drop-preview">drop here to split</div>
+                    </Panel>
+                  </>
+                )}
               </Group>
             )}
 

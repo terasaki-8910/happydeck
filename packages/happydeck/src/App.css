@@ -216,6 +216,16 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.sidebar-local-device {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
 .sidebar-footer-icon {
   display: flex;
   align-items: center;
@@ -637,13 +647,23 @@ body {
 .panes {
   flex: 1;
   min-height: 0;
-  transition: outline-color 0.1s ease;
-  outline: 2px solid transparent;
-  outline-offset: -2px;
 }
 
-.panes-drop-target {
-  outline-color: var(--accent);
+/* Rendered as an actual sibling Panel during drag-over, not a CSS overlay —
+   it occupies real layout space, so the existing panes visibly shrink to
+   make room exactly as they would after the drop. That's the "preview". */
+.pane-drop-preview {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  margin: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .tile {
@@ -1440,17 +1460,84 @@ body {
   font-size: 11.5px;
 }
 
-.settings-checkbox {
+.settings-machines-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.settings-machines-table th {
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-machines-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.settings-machines-table td:first-child {
+  color: var(--text);
+}
+
+.settings-machines-table .status-dot {
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.settings-this-machine {
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
+.toggle-switch-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 0;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 8px 0;
   font-size: 12.5px;
+  color: var(--text);
   cursor: pointer;
 }
 
-.settings-checkbox input {
-  accent-color: var(--accent);
+.toggle-switch {
+  flex-shrink: 0;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  transition: background 0.15s ease;
+}
+
+.toggle-switch-on {
+  background: var(--accent);
+}
+
+.toggle-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.15s ease;
+}
+
+.toggle-switch-on .toggle-switch-knob {
+  transform: translateX(14px);
+  background: #0b0b0c;
 }
 
 .settings-error {

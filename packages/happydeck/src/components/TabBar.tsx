@@ -1,9 +1,11 @@
 import { type DragEvent, useState } from 'react';
 import { SESSION_DRAG_MIME } from '../lib/dnd';
+import { useT } from '../lib/i18n';
 import { useViewStore } from '../store/viewStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 
 export function TabBar() {
+  const t = useT();
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
@@ -53,7 +55,7 @@ export function TabBar() {
           showGrid();
         }}
       >
-        All
+        {t('all')}
       </button>
 
       {workspaces.map((workspace) => (
@@ -108,7 +110,7 @@ export function TabBar() {
         />
       ) : (
         <button type="button" className="tab tab-new" onClick={() => setCreating(true)}>
-          + new tab
+          {t('newTab')}
         </button>
       )}
     </nav>

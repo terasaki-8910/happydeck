@@ -1,10 +1,16 @@
 import { type FormEvent, useState } from 'react';
+import { useT } from '../lib/i18n';
 import { useHappyStore } from '../store/happyStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { DirectoryBrowser } from './DirectoryBrowser';
 
 export function SpawnPanel() {
+  const t = useT();
   const machines = useHappyStore((s) => s.machines);
   const spawnSession = useHappyStore((s) => s.spawnSession);
+  const defaultPermissionMode = useSettingsStore((s) => s.defaultPermissionMode);
+  const defaultModelMode = useSettingsStore((s) => s.defaultModelMode);
+  const defaultEffortLevel = useSettingsStore((s) => s.defaultEffortLevel);
 
   const [open, setOpen] = useState(false);
   const [machineId, setMachineId] = useState('');
@@ -30,6 +36,9 @@ export function SpawnPanel() {
         machineId,
         directory: directory.trim(),
         approvedNewDirectoryCreation: needsApproval,
+        permissionMode: defaultPermissionMode,
+        modelMode: defaultModelMode,
+        effortLevel: defaultEffortLevel,
       });
       if (!result) {
         setError('No response from the machine (RPC returned nothing decryptable)');
@@ -55,7 +64,7 @@ export function SpawnPanel() {
   if (!open) {
     return (
       <button type="button" className="spawn-toggle" onClick={() => setOpen(true)}>
-        + new session
+        {t('newSession')}
       </button>
     );
   }

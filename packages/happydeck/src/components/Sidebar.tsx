@@ -3,6 +3,7 @@ import { type RefObject, useEffect } from 'react';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { type LiveSession, useHappyStore } from '../store/happyStore';
 import { SESSION_DRAG_MIME } from '../lib/dnd';
+import { useT } from '../lib/i18n';
 import { byRecency } from '../lib/sessionOrder';
 import { deriveTitle } from '../lib/sessionTitle';
 import { usePinStore } from '../store/pinStore';
@@ -102,9 +103,13 @@ interface SidebarProps {
 }
 
 export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) {
+  const t = useT();
   const collapsed = useViewStore((s) => s.sidebarCollapsed);
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen);
   const pinnedIds = usePinStore((s) => s.pinnedIds);
+  const localMachineId = useHappyStore((s) => s.localMachineId);
+  const machines = useHappyStore((s) => s.machines);
+  const localHost = (machines.find((m) => m.id === localMachineId)?.metadata as { host?: string } | null)?.host;
 
   // Auto-collapse only fires at the moment the breakpoint is crossed, so it
   // never fights a manual toggle (or a manual drag-resize) made while
@@ -151,7 +156,7 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
 
       {!collapsed && (
         <div className="sidebar-tabs">
-          <span className="sidebar-section-label">workspaces</span>
+          <span className="sidebar-section-label">{t('workspaces')}</span>
           <TabBar />
         </div>
       )}
@@ -159,7 +164,7 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
       <nav className="sidebar-sessions">
         {pinned.length > 0 && (
           <>
-            {!collapsed && <span className="sidebar-section-label sidebar-section-label-inline">pinned</span>}
+            {!collapsed && <span className="sidebar-section-label sidebar-section-label-inline">{t('pinned')}</span>}
             {pinned.map((session) => (
               <SessionRow key={session.id} session={session} collapsed={collapsed} active={session.id === focusedSessionId} />
             ))}
@@ -169,10 +174,15 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
         {rest.map((session) => (
           <SessionRow key={session.id} session={session} collapsed={collapsed} active={session.id === focusedSessionId} />
         ))}
-        {ordered.length === 0 && !collapsed && <p className="sidebar-empty">no sessions</p>}
+        {ordered.length === 0 && !collapsed && <p className="sidebar-empty">{t('noSessions')}</p>}
       </nav>
 
       <div className="sidebar-footer">
+        {!collapsed && localHost && (
+          <span className="sidebar-local-device" title={localHost}>
+            {localHost}
+          </span>
+        )}
         <button type="button" className="sidebar-footer-icon" title="Settings (⌘,)" onClick={() => setSettingsOpen(true)}>
           <GearIcon />
         </button>
