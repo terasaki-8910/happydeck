@@ -7,7 +7,7 @@ const CCDECK_VERSION = '0.1.0';
  *
  * happy-app detects `desktop` by checking `'__TAURI__' in window`; these
  * Node verification scripts have no `window`, so this is hardcoded. Once
- * ccdeck's Tauri webview consumes this package, this should become a real
+ * happydeck's Tauri webview consumes this package, this should become a real
  * `'__TAURI__' in window` check mirroring the original.
  */
 export function getHappyClientId(): string {

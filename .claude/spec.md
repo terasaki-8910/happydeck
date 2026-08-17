@@ -1,4 +1,4 @@
-# ccdeck スペック (v0.1 — 承認待ち)
+# happydeck スペック (v0.1 — 承認待ち)
 
 `.claude/requirements.md` を出発点に、リサーチ(happy本家ソース読解)と質疑応答で確定した内容をまとめたもの。
 実装(git worktree単位)に進む前の承認ゲート。
@@ -7,10 +7,10 @@
 
 | 項目 | 決定 |
 |---|---|
-| 採用方針 | `happy-desktop`(公式Electron)は不採用。参考程度に留め、Tauriで ccdeck をゼロから自作 |
+| 採用方針 | `happy-desktop`(公式Electron)は不採用。参考程度に留め、Tauriで happydeck をゼロから自作 |
 | 対象プロトコル | classic `happy` プロトコル(NaCl暗号化 + socket.ioリレー)。`rig`(新ハーネス)は対象外 — 4台とも classic 確認済み |
 | 暗号化/認証実装 | `slopus/happy` 本家ソースを読解した上でのクリーンルーム実装(コピペ不可) |
-| デバイス認証 | 新規デバイスリンク1回のみ許容。ccdeckがQR表示→既存スマホアプリでスキャン承認(スマホ側改修不要) |
+| デバイス認証 | 新規デバイスリンク1回のみ許容。happydeckがQR表示→既存スマホアプリでスキャン承認(スマホ側改修不要) |
 | 対象OS(GUI本体) | Mac のみ。Windows/NixOS/Ubuntu側の `happy` セットアップは完了・動作確認済みで対象外 |
 | iPhone | 公式Happyアプリをそのまま使用。開発対象外 |
 | タブ/一括操作 | タブ=自由に作れるワークスペース(マシン横断でプロジェクト単位等にグルーピング可)。選択した複数セッションへの一括メッセージ送信・一括permission承認 |
@@ -40,12 +40,12 @@ packages/
                      - auth/          デバイスリンク(QR発行→ポーリング→鍵復号)、トークン発行(challenge-signature)
                      - transport/     socket.io-client 接続、RPC呼び出し(sessionRPC/machineRPC)
                      - sync/          machines/sessions/messages のローカル状態同期(happy-appのsync.ts/ops.ts/reducer.tsを参考にした再実装)
-  ccdeck/            新規。Tauriアプリ本体
+  happydeck/            新規。Tauriアプリ本体
                      - src/           React + TypeScript UI
                      - src-tauri/     Rustシェル(通知・キーチェーン・ウィンドウ管理)
 ```
 
-`happy-client` を分離するのは、暗号化/同期ロジックをUIから独立してテストできるようにするため(`ccdeck`側は「動くものを都度手で確認」で構わないが、`happy-client`の暗号化まわりは自動テストで担保したい)。
+`happy-client` を分離するのは、暗号化/同期ロジックをUIから独立してテストできるようにするため(`happydeck`側は「動くものを都度手で確認」で構わないが、`happy-client`の暗号化まわりは自動テストで担保したい)。
 
 ### 技術スタック
 
@@ -114,7 +114,7 @@ packages/
 
 ## 未解決・実装中に検証が必要な点
 
-1. `authAccountApprove` のサーバ側状態遷移は未確認(ccdeck は requester側のみ実装するため通常は不要だが、E2Eで詰まったら要確認)
+1. `authAccountApprove` のサーバ側状態遷移は未確認(happydeck は requester側のみ実装するため通常は不要だが、E2Eで詰まったら要確認)
 2. AES-256-GCMのnonce/IV生成方法は `rn-encryption` ネイティブ実装依存で完全には未確認 → WebCrypto実装時に、既存の暗号文を正しく復号できるかで実地検証する
 3. 一括操作のUXの詳細(全滅コマンド確認ダイアログの要否、部分失敗時の表示など)は実装しながら詰める
 
@@ -129,7 +129,7 @@ packages/
 | M3 | 4台横断のグリッド + タブ(ワークスペース) | 4台のセッションが1画面に同時表示され、タブでグルーピングできる | ✅ 完了(2026-08-17, commit `dfab911`) |
 | M4 | 操作系: メッセージ送信・permission/model/reasoning切替・allow/deny・abort/kill・新規セッション起動 | 各操作が実機のセッションに反映される | ✅ 完了(2026-08-17, commit `2759041`)。使い捨てセッションをspawnして実地検証。allow/denyのみ、実機で保留中のpermission requestが発生しなかったため未実地確認(sessionRPCの共通実装は他操作で検証済み) |
 | M5 | 一括操作(複数選択→一括送信・一括承認) | 複数セッションへの一括操作が動作する | ✅ 完了(2026-08-17, commit `27b1eb3`)。使い捨てセッション2件をspawnして実地検証(選択→一括送信が正しい対象に届くことを確認) |
-| M6 | Macネイティブ通知 | セッション完了等で通知が飛ぶ | ⚠️ コードは完了・実地確認は一部保留(2026-08-17)。`tauri-plugin-notification` を導入し、`ephemeral: session-event`(モバイルpushと同じ発火源)を検知して`sendNotification`を呼ぶところまで実装。デバッグ出力で`isPermissionGranted()=true`・`sendNotification()`が例外なく完了することは実機で確認したが、**バナー自体は表示されなかった**(通知センターにも記録なし)。原因はコード側ではなく、未署名devビルドがmacOSの「アプリケーションの通知」一覧で既定スタイル「オフ」になっている可能性が高い(同リストの他の未使用アプリも軒並み「オフ」)。本番ビルド(署名済み)で解消するか、システム設定 > 通知 > ccdeck でスタイルを手動有効化する必要がある。次回起動時にユーザーご自身で確認をお願いしたい |
+| M6 | Macネイティブ通知 | セッション完了等で通知が飛ぶ | ⚠️ コードは完了・実地確認は一部保留(2026-08-17)。`tauri-plugin-notification` を導入し、`ephemeral: session-event`(モバイルpushと同じ発火源)を検知して`sendNotification`を呼ぶところまで実装。デバッグ出力で`isPermissionGranted()=true`・`sendNotification()`が例外なく完了することは実機で確認したが、**バナー自体は表示されなかった**(通知センターにも記録なし)。原因はコード側ではなく、未署名devビルドがmacOSの「アプリケーションの通知」一覧で既定スタイル「オフ」になっている可能性が高い(同リストの他の未使用アプリも軒並み「オフ」)。本番ビルド(署名済み)で解消するか、システム設定 > 通知 > happydeck でスタイルを手動有効化する必要がある。次回起動時にユーザーご自身で確認をお願いしたい |
 | M7 | デザイン仕上げ | 見た目レビュー(人間ゲート) | 未着手。ユーザーから「見た目は微妙」との一次コメントあり(2026-08-17)、詳細フィードバックは保留中 |
 
 M1〜M2はセキュリティ・プロトコル互換性の検証が主目的のため優先。M7以前でも「見た目の方向性」自体は早期(M2〜M3あたり)に一度レビューをもらう想定。

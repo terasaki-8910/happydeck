@@ -2,7 +2,7 @@
   "name": "happy-client",
   "version": "0.1.0",
   "private": true,
-  "description": "Clean-room TypeScript client for the Happy relay protocol (device-link auth, E2E crypto, sync) — the shared core behind ccdeck",
+  "description": "Clean-room TypeScript client for the Happy relay protocol (device-link auth, E2E crypto, sync) — the shared core behind happydeck",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

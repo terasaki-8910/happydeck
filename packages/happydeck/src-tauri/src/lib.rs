@@ -5,8 +5,10 @@ use std::path::PathBuf;
 
 // Must match packages/happy-client/src/auth/credentials.ts exactly — both
 // read/write the same macOS Keychain item so a device linked once (via the
-// happy-client verification scripts) is usable from ccdeck without
-// re-linking.
+// happy-client verification scripts) is usable from happydeck without
+// re-linking. The service name itself stays "ccdeck-happy-account" (the
+// product's former name) — changing it would orphan the already-linked
+// Keychain item and force a re-link.
 const KEYCHAIN_SERVICE: &str = "ccdeck-happy-account";
 const KEYCHAIN_ACCOUNT: &str = "default";
 
@@ -39,7 +41,7 @@ struct HappyCliSettings {
 }
 
 /// This machine's Happy `machineId`, read from the same `~/.happy/settings.json`
-/// the `happy` CLI writes — lets ccdeck identify "this machine"'s own
+/// the `happy` CLI writes — lets happydeck identify "this machine"'s own
 /// sessions among everything the account can see.
 #[tauri::command]
 fn get_local_machine_id() -> Result<Option<String>, String> {

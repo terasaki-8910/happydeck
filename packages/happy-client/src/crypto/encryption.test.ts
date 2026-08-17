@@ -85,7 +85,7 @@ describe('end-to-end: a session row with a wrapped dataEncryptionKey', () => {
     expect(unwrapped).not.toBeNull();
     const sessionEncryption = enc.openEncryption(unwrapped);
 
-    const message = { role: 'user', content: { type: 'text', text: 'hello from ccdeck' } };
+    const message = { role: 'user', content: { type: 'text', text: 'hello from happydeck' } };
     const [encryptedMessage] = await sessionEncryption.encrypt([message]);
     const [decryptedMessage] = await sessionEncryption.decrypt([encryptedMessage]);
     expect(decryptedMessage).toEqual(message);

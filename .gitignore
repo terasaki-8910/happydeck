@@ -10,7 +10,7 @@ target/
 .claude/settings.local.json
 
 # Tauri
-packages/ccdeck/src-tauri/target/
+packages/happydeck/src-tauri/target/
 
 # Scratch dirs (e.g. throwaway spawned-session test targets)
 .scratch/

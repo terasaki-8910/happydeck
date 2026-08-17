@@ -20,6 +20,8 @@ const execFileAsync = promisify(execFile);
  * implementation would go through Security.framework directly.
  */
 
+// Deliberately still "ccdeck" (the product's former name) — changing it
+// would orphan the already-linked Keychain item and force a re-link.
 const SERVICE = 'ccdeck-happy-account';
 const ACCOUNT = 'default';
 

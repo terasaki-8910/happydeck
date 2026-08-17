@@ -54,6 +54,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           ),
         })),
     }),
-    { name: 'ccdeck-workspaces' },
+    { name: 'happydeck-workspaces' },
   ),
 );

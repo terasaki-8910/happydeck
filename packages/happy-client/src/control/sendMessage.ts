@@ -38,7 +38,7 @@ export async function sendSessionMessage(
   const content = {
     role: 'user',
     content: { type: 'text', text },
-    meta: { sentFrom: 'ccdeck', ...meta },
+    meta: { sentFrom: 'happydeck', ...meta },
   };
   const [encryptedBytes] = await encryptor.encrypt([content]);
 

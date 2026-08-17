@@ -34,7 +34,7 @@ function App() {
   return (
     <main className="app">
       <header className="app-header">
-        <h1>ccdeck</h1>
+        <h1>happydeck</h1>
         <span className="app-subtitle">
           {visibleSessions.length} session{visibleSessions.length === 1 ? '' : 's'}
           {activeWorkspace ? ` in "${activeWorkspace.name}"` : ' across all machines'}
