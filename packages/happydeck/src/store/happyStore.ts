@@ -44,7 +44,9 @@ import {
   updateSessionSummary,
 } from 'happy-client';
 import { buildMockSession, MOCK_ENABLED, mockCreateDirectory, mockListDirectory, mockMachines, mockSessions } from '../lib/mockData';
+import { sentButNotResumedError } from '../lib/errorMessages';
 import { ensureNotificationPermission, notify } from '../lib/notifications';
+import { explainResumeError } from '../lib/resumeError';
 import { getLocalMachineId, getStoredCredentials } from '../lib/tauri';
 import { useSettingsStore } from './settingsStore';
 
@@ -120,6 +122,14 @@ let machineEncryptors = new Map<string, Encryptor & Decryptor>();
 let relay: RelaySocket | null = null;
 let http: HttpClient | null = null;
 let secret: Uint8Array | null = null;
+
+// Cooldown for sendMessage's auto-resume — a live-update announcing the
+// resumed process is active can take a few seconds to arrive, and sending
+// several messages in that window shouldn't spawn a second (or third...)
+// process for the same session. Not reactive state, same reasoning as the
+// encryptor maps above.
+const lastResumeAttemptAt = new Map<string, number>();
+const RESUME_COOLDOWN_MS = 30_000;
 
 function requireSocket() {
   if (!relay) {
@@ -364,6 +374,28 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   },
 
   async sendMessage(sessionId, text, meta) {
+    // Sending to an offline session queues fine either way (sendSessionMessage
+    // is a plain HTTP call, not dependent on a live connection) — but nothing
+    // will actually read it until some process resumes the session, so try to
+    // bring it back online first rather than making the user click Resume
+    // themselves before every message.
+    const session = get().sessions.find((s) => s.id === sessionId);
+    let resumeFailure: string | null = null;
+    if (session && !session.active) {
+      const lastAttempt = lastResumeAttemptAt.get(sessionId) ?? 0;
+      if (Date.now() - lastAttempt > RESUME_COOLDOWN_MS) {
+        lastResumeAttemptAt.set(sessionId, Date.now());
+        try {
+          const result = await get().resumeSession(sessionId);
+          if (result.type !== 'success') {
+            resumeFailure = result.type === 'error' ? result.errorMessage : result.type;
+          }
+        } catch (error) {
+          resumeFailure = error instanceof Error ? error.message : String(error);
+        }
+      }
+    }
+
     if (MOCK_ENABLED) {
       set((state) => ({
         sessions: state.sessions.map((s) =>
@@ -378,9 +410,14 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
             : s,
         ),
       }));
-      return;
+    } else {
+      await sendSessionMessage(requireHttp(), sessionId, requireSessionEncryptor(sessionId), text, meta);
     }
-    await sendSessionMessage(requireHttp(), sessionId, requireSessionEncryptor(sessionId), text, meta);
+
+    if (resumeFailure) {
+      const language = useSettingsStore.getState().language;
+      throw new Error(sentButNotResumedError(language, explainResumeError(resumeFailure, language)));
+    }
   },
 
   async setAgentModes(sessionId, patch) {

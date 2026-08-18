@@ -56,8 +56,12 @@ export function machineRPC<TResult, TParams>(
   return callRPC(socket, machineId, method, params, encryptor);
 }
 
-const DISCONNECT_RETRY_LIMIT = 2;
-const RECONNECT_WAIT_MS = 8000;
+// Confirmed live over Tailscale to a real remote machine that the original
+// budget (2 retries x 8s) wasn't always enough — bumped rather than removed
+// the bound entirely, since this still needs to fail eventually rather than
+// hang forever on a machine that's genuinely unreachable.
+const DISCONNECT_RETRY_LIMIT = 3;
+const RECONNECT_WAIT_MS = 12_000;
 
 function waitForReconnect(socket: Socket, timeoutMs: number): Promise<boolean> {
   if (socket.connected) return Promise.resolve(true);

@@ -1,9 +1,10 @@
 import { type ClipboardEvent, type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { LuSendHorizontal } from 'react-icons/lu';
+import { LuLoaderCircle, LuSendHorizontal } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { buildAttachmentDir, buildAttachmentPath, extensionForMimeType, relativeAttachmentPath } from '../lib/attachments';
 import { downloadTranscript } from '../lib/exportTranscript';
+import { attachDisconnectedError, cwdNotKnownError, sshTargetMissingError, unknownAttachMachineError } from '../lib/errorMessages';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
 import { type TranslationKey, useT } from '../lib/i18n';
 import { openInTerminal } from '../lib/openTerminal';
@@ -80,6 +81,7 @@ export function SessionTile({
   onClosePane,
 }: SessionTileProps) {
   const t = useT();
+  const language = useSettingsStore((s) => s.language);
   const localMachineId = useHappyStore((s) => s.localMachineId);
   const machines = useHappyStore((s) => s.machines);
   const sendMessage = useHappyStore((s) => s.sendMessage);
@@ -112,6 +114,7 @@ export function SessionTile({
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const pendingOlderLoadScrollHeightRef = useRef<number | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [attaching, setAttaching] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const status = statusOf(session);
@@ -145,8 +148,12 @@ export function SessionTile({
   // Follow new output as it streams in, but only if the user hasn't scrolled
   // up to read history — never yank them back down mid-read. isNearBottomRef
   // reflects scroll position as of BEFORE this update (kept live by
-  // onScroll below), not the post-append state.
-  useEffect(() => {
+  // onScroll below), not the post-append state. useLayoutEffect (not
+  // useEffect) so this runs before paint — a plain useEffect fires AFTER
+  // the browser has already shown the frame, so opening a session visibly
+  // flashed at the top and then jumped to the bottom instead of just
+  // appearing there.
+  useLayoutEffect(() => {
     const el = messagesRef.current;
     if (el && isNearBottomRef.current) {
       el.scrollTop = el.scrollHeight;
@@ -224,13 +231,14 @@ export function SessionTile({
   // file-picker batch and a later paste never collide.
   const attachFiles = async (files: File[]) => {
     if (files.length === 0) return;
-    if (!metadata?.path || !metadata.machineId) throw new Error("This session's working directory isn't known yet — try again once it's loaded.");
+    if (!metadata?.path || !metadata.machineId) throw new Error(cwdNotKnownError(language));
     const cwd = metadata.path;
     const machineId = metadata.machineId;
     const targetMachine = machines.find((m) => m.id === machineId);
     const platform = (targetMachine?.metadata as { platform?: string } | null)?.platform;
-    if (!platform) throw new Error(`Unknown machine for this session (${metadata.host ?? machineId}) — can't tell how to create a directory there.`);
+    if (!platform) throw new Error(unknownAttachMachineError(language, metadata.host ?? machineId));
 
+    setAttaching(true);
     try {
       const attachDir = buildAttachmentDir(cwd, Date.now());
       const mkdirResult = await createMachineDirectory(machineId, attachDir, platform);
@@ -252,9 +260,11 @@ export function SessionTile({
       // reaching here means it stayed down longer than that, most likely on
       // a cross-machine attachment over a slower/less stable connection.
       if (error instanceof Error && error.message === 'socket has been disconnected') {
-        throw new Error(`Lost connection to ${metadata.host ?? machineId} partway through — already retried automatically. Check that machine's connection and try again.`);
+        throw new Error(attachDisconnectedError(language, metadata.host ?? machineId));
       }
       throw error;
+    } finally {
+      setAttaching(false);
     }
   };
 
@@ -435,7 +445,7 @@ export function SessionTile({
               // failure — was silently swallowed here before, since
               // runAction only surfaces thrown errors.
               const raw = result.type === 'error' ? result.errorMessage : result.type;
-              throw new Error(explainResumeError(raw));
+              throw new Error(explainResumeError(raw, language));
             })
           }
           onDownload={() => runAction(() => downloadTranscript(session))}
@@ -446,7 +456,7 @@ export function SessionTile({
                   runAction(() => {
                     if (isLocalSession) return openInTerminal(localMachineId, metadata.path as string, terminalApp, terminalWindowMode, runMachineBash);
                     const sshTarget = metadata.machineId ? sshTargets[metadata.machineId] : undefined;
-                    if (!sshTarget) throw new Error(`No SSH target configured for ${metadata.host ?? 'this machine'} — set one in Settings > Terminal.`);
+                    if (!sshTarget) throw new Error(sshTargetMissingError(language, metadata.host ?? (language === 'ja' ? 'このマシン' : 'this machine')));
                     return openInTerminal(localMachineId, metadata.path as string, terminalApp, terminalWindowMode, runMachineBash, {
                       sshTarget,
                       platform: remoteMachinePlatform,
@@ -525,21 +535,29 @@ export function SessionTile({
             onInsertSlashCommand={(command) => setDraft((d) => `${d}/${command} `, { coalesce: false })}
             onAttachFile={handleAttachClick}
           />
-          <textarea
-            ref={composerInputRef}
-            className="tile-composer-input"
-            rows={1}
-            value={draft}
-            disabled={busy}
-            placeholder={t('messagePlaceholder')}
-            onChange={(event) => {
-              setDraft(event.target.value);
-              setSlashDismissed(false);
-              setSlashHighlight(0);
-            }}
-            onKeyDown={handleComposerKeyDown}
-            onPaste={handleComposerPaste}
-          />
+          <div className="tile-composer-input-wrap">
+            <textarea
+              ref={composerInputRef}
+              className="tile-composer-input"
+              rows={1}
+              value={draft}
+              disabled={busy}
+              placeholder={t('messagePlaceholder')}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setSlashDismissed(false);
+                setSlashHighlight(0);
+              }}
+              onKeyDown={handleComposerKeyDown}
+              onPaste={handleComposerPaste}
+            />
+            {attaching && (
+              <span className="tile-composer-attaching">
+                <LuLoaderCircle size={13} className="tile-composer-spinner" />
+                {t('attachingFile')}
+              </span>
+            )}
+          </div>
           <AgentSettingsPopover
             permissionMode={metadata?.permissionMode ?? 'default'}
             modelMode={metadata?.modelMode ?? 'default'}

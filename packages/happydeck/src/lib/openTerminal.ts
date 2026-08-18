@@ -1,4 +1,5 @@
-import type { TerminalAppChoice, TerminalWindowMode } from '../store/settingsStore';
+import { terminalOpenFailedError } from './errorMessages';
+import { useSettingsStore, type TerminalAppChoice, type TerminalWindowMode } from '../store/settingsStore';
 
 /** Escapes a string for embedding as an AppleScript double-quoted string literal. */
 function appleScriptString(value: string): string {
@@ -107,6 +108,6 @@ export function openInTerminal(
   const script = app === 'Terminal' ? appleScriptForTerminal(shellCommand, windowMode) : appleScriptForITerm(shellCommand, windowMode);
   const command = `osascript -e ${shellSingleQuote(script)}`;
   return runMachineBash(localMachineId, command).then((result) => {
-    if (!result.success) throw new Error(result.error || `Failed to open ${app}`);
+    if (!result.success) throw new Error(result.error || terminalOpenFailedError(useSettingsStore.getState().language, app));
   });
 }

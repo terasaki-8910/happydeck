@@ -1607,8 +1607,15 @@ body {
   color: var(--bg);
 }
 
+.tile-composer-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
 .tile-composer-input {
   flex: 1;
+  width: 100%;
   background: transparent;
   border: none;
   color: var(--text);
@@ -1621,6 +1628,32 @@ body {
   max-height: 140px;
   overflow-y: auto;
   resize: none;
+}
+
+.tile-composer-attaching {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg);
+  pointer-events: none;
+}
+
+.tile-composer-spinner {
+  animation: tile-composer-spin 0.8s linear infinite;
+}
+
+@keyframes tile-composer-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .tile-composer-input:focus {

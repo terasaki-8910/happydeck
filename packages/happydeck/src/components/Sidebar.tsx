@@ -10,6 +10,7 @@ import { messageRole, renderablePart } from '../lib/formatMessage';
 import { useT } from '../lib/i18n';
 import { basename } from '../lib/paths';
 import { byRecency } from '../lib/sessionOrder';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { deriveTitle } from '../lib/sessionTitle';
 import { useEffectiveTheme } from '../lib/useEffectiveTheme';
 import { usePinStore } from '../store/pinStore';
@@ -179,7 +180,22 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
     return () => window.removeEventListener('resize', onResize);
   }, [panelRef]);
 
-  const ordered = byRecency(sessions);
+  // Right after connecting, catch-up live-update events for several
+  // sessions can land within milliseconds of each other, each one
+  // re-sorting the list — visibly shuffling rows around before things
+  // settle. Debouncing the ORDER (not the row content, which stays live)
+  // smooths that into one settled arrangement. Adding/removing a session
+  // still shows immediately — only pure reordering among the same set of
+  // sessions gets smoothed, so a brand new session is never delayed or a
+  // deleted one left showing.
+  const liveOrdered = byRecency(sessions);
+  const liveKey = liveOrdered.map((s) => s.id).join(',');
+  const debouncedKey = useDebouncedValue(liveKey, 500);
+  const liveSetKey = [...liveOrdered.map((s) => s.id)].sort().join(',');
+  const debouncedSetKey = [...debouncedKey.split(',')].filter(Boolean).sort().join(',');
+  const orderedIds = liveSetKey === debouncedSetKey ? debouncedKey.split(',').filter(Boolean) : liveOrdered.map((s) => s.id);
+  const sessionById = new Map(sessions.map((s) => [s.id, s]));
+  const ordered = orderedIds.map((id) => sessionById.get(id)).filter((s): s is LiveSession => s !== undefined);
   const pinnedSet = new Set(pinnedIds);
   const pinned = ordered.filter((s) => pinnedSet.has(s.id));
   const rest = ordered.filter((s) => !pinnedSet.has(s.id));

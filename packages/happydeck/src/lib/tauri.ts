@@ -1,4 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
+import { credentialsReadTimeoutError, credentialsWriteTimeoutError, localMachineIdTimeoutError } from './errorMessages';
+import { useSettingsStore } from '../store/settingsStore';
 
 export interface StoredCredentials {
   schemaVersion: 1;
@@ -38,18 +40,15 @@ function withTauriTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
 
 /** Reads the Happy account credentials from the macOS Keychain via the Rust bridge (src-tauri/src/lib.rs). */
 export async function getStoredCredentials(): Promise<StoredCredentials | null> {
-  return withTauriTimeout(
-    invoke<StoredCredentials | null>('get_credentials'),
-    'Reading account credentials from the macOS Keychain timed out. A Keychain access prompt may be stuck behind another window, or failed to appear at all (known to happen with dev builds, whose code signature changes on every rebuild) — check for a "happydeck wants to access…" dialog on another Space/window, then Retry. If it keeps happening, try Keychain Access.app → search "ccdeck-happy-account" → check its access control, or quit happydeck fully (not just close the window) and reopen it.',
-  );
+  return withTauriTimeout(invoke<StoredCredentials | null>('get_credentials'), credentialsReadTimeoutError(useSettingsStore.getState().language));
 }
 
 /** Saves Happy account credentials to the macOS Keychain — the write side, used by the in-app QR device-link flow. */
 export async function setStoredCredentials(credentials: StoredCredentials): Promise<void> {
-  return withTauriTimeout(invoke<void>('set_credentials', { credentials }), 'Saving account credentials to the macOS Keychain timed out — same likely cause as the read-side timeout (see getStoredCredentials).');
+  return withTauriTimeout(invoke<void>('set_credentials', { credentials }), credentialsWriteTimeoutError(useSettingsStore.getState().language));
 }
 
 /** This machine's Happy machineId, read from ~/.happy/settings.json via the Rust bridge. */
 export async function getLocalMachineId(): Promise<string | null> {
-  return withTauriTimeout(invoke<string | null>('get_local_machine_id'), "Reading this machine's Happy ID (~/.happy/settings.json) timed out unexpectedly — this is a plain local file read, so if this fires the Tauri IPC bridge itself is likely stuck rather than anything keychain-specific.");
+  return withTauriTimeout(invoke<string | null>('get_local_machine_id'), localMachineIdTimeoutError(useSettingsStore.getState().language));
 }

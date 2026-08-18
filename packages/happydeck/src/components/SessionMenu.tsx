@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useT } from '../lib/i18n';
 import { explainResumeError } from '../lib/resumeError';
 import type { LiveSession } from '../store/happyStore';
+import { useSettingsStore } from '../store/settingsStore';
 import type { Workspace } from '../store/workspaceStore';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -20,6 +21,7 @@ interface SessionMenuProps {
 /** The "⋮" menu on a sidebar session row: pin, rename, add to a workspace, resume (offline only), delete. */
 export function SessionMenu({ session, title, pinned, workspaces, onTogglePin, onAddToWorkspace, onRename, onDelete, onResume }: SessionMenuProps) {
   const t = useT();
+  const language = useSettingsStore((s) => s.language);
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState(title);
@@ -128,7 +130,7 @@ export function SessionMenu({ session, title, pinned, workspaces, onTogglePin, o
                       const result = (await onResume()) as { type: string; errorMessage?: string } | undefined;
                       if (result && result.type !== 'success') {
                         const raw = result.errorMessage || `Resume failed: ${result.type}`;
-                        throw new Error(explainResumeError(raw));
+                        throw new Error(explainResumeError(raw, language));
                       }
                     }).then((ok) => ok && setOpen(false))
                   }
