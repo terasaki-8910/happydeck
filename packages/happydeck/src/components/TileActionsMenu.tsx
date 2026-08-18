@@ -1,6 +1,6 @@
-import { openPath } from '@tauri-apps/plugin-opener';
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../lib/i18n';
+import { openInTerminal } from '../lib/openTerminal';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface TileActionsMenuProps {
@@ -9,7 +9,7 @@ interface TileActionsMenuProps {
   onAbort: () => void;
   onDownload: () => void;
   onKill: () => void;
-  /** The session's working directory, only when it's running on this machine — opening a real Terminal/iTerm window only makes sense for a path that actually exists locally. Undefined hides both options. */
+  /** The session's working directory, only when it's running on this machine — opening a real terminal window only makes sense for a path that actually exists locally. Undefined hides the option. */
   localPath?: string;
 }
 
@@ -74,26 +74,15 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, loca
             {t('downloadTranscript')}
           </button>
           {localPath && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  openPath(localPath, 'Terminal');
-                  setOpen(false);
-                }}
-              >
-                {t('openInTerminal')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  openPath(localPath, 'iTerm');
-                  setOpen(false);
-                }}
-              >
-                {t('openInIterm')}
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => {
+                openInTerminal(localPath);
+                setOpen(false);
+              }}
+            >
+              {t('openInTerminal')}
+            </button>
           )}
           <div className="session-menu-divider" />
           <button

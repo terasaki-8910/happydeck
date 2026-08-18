@@ -253,6 +253,7 @@ function App() {
           maxSize={420}
           collapsible
           collapsedSize={52}
+          groupResizeBehavior="preserve-pixel-size"
           onResize={(size) => setSidebarCollapsed(size.inPixels <= 54)}
         >
           <Sidebar sessions={sessions} focusedSessionId={mode.type === 'panes' ? activePaneSessionId : null} panelRef={sidebarPanelRef} />

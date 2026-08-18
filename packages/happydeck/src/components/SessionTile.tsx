@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { FiSend } from 'react-icons/fi';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { downloadTranscript } from '../lib/exportTranscript';
@@ -309,9 +310,7 @@ export function SessionTile({
             onChange={(event) => setDraft(event.target.value)}
           />
           <button type="submit" className="tile-composer-send" disabled={busy || !draft.trim()} title={t('send')} aria-label={t('send')}>
-            <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
-              <path d="M3 2 L14 8 L3 14 Z" />
-            </svg>
+            <FiSend size={17} strokeWidth={2.25} />
           </button>
         </form>
       </div>
