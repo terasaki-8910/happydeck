@@ -98,7 +98,7 @@ function GeneralSection() {
           ))}
         </select>
       </label>
-      <p className="settings-hint">Translates the app's own UI chrome. Session content, paths, and error text stay as-is.</p>
+      <p className="settings-hint">{t('languageHint')}</p>
 
       <label className="settings-field">
         <span>{t('font')}</span>
@@ -110,13 +110,13 @@ function GeneralSection() {
           ))}
         </select>
       </label>
-      <p className="settings-hint">Applies to prose/UI text. Code and commands always stay monospace.</p>
+      <p className="settings-hint">{t('fontHint')}</p>
 
-      <h3>Default new-session options</h3>
-      <p className="settings-hint">Used as the starting point in the spawn panel — you can still change any of these per session.</p>
+      <h3>{t('defaultNewSessionOptions')}</h3>
+      <p className="settings-hint">{t('defaultNewSessionOptionsHint')}</p>
 
       <label className="settings-field">
-        <span>Permission mode</span>
+        <span>{t('permissionModeLabel')}</span>
         <select value={defaultPermissionMode} onChange={(event) => setDefaultAgentOptions({ permissionMode: event.target.value })}>
           {CLAUDE_PERMISSION_MODES.map((mode) => (
             <option key={mode.key} value={mode.key}>
@@ -126,7 +126,7 @@ function GeneralSection() {
         </select>
       </label>
       <label className="settings-field">
-        <span>Model</span>
+        <span>{t('modelLabel')}</span>
         <select value={defaultModelMode} onChange={(event) => setDefaultAgentOptions({ modelMode: event.target.value })}>
           {CLAUDE_MODEL_MODES.map((model) => (
             <option key={model.key} value={model.key}>
@@ -136,7 +136,7 @@ function GeneralSection() {
         </select>
       </label>
       <label className="settings-field">
-        <span>Reasoning effort</span>
+        <span>{t('reasoningEffort')}</span>
         <select value={defaultEffortLevel} onChange={(event) => setDefaultAgentOptions({ effortLevel: event.target.value })}>
           {CLAUDE_EFFORT_LEVELS.map((effort) => (
             <option key={effort.key} value={effort.key}>
@@ -157,18 +157,15 @@ function AccountSection() {
   return (
     <div className="settings-section">
       <h2>{t('settingsAccount')}</h2>
-      <p className="settings-hint">
-        happydeck reuses your existing Happy account — there's no separate login. The account is identified by the
-        device-linked master secret stored in the macOS Keychain.
-      </p>
+      <p className="settings-hint">{t('accountHint')}</p>
 
       <h3>{t('linkedMachines')}</h3>
       <table className="settings-machines-table">
         <thead>
           <tr>
-            <th>Device</th>
-            <th>Platform</th>
-            <th>Status</th>
+            <th>{t('device')}</th>
+            <th>{t('platform')}</th>
+            <th>{t('status')}</th>
           </tr>
         </thead>
         <tbody>
@@ -178,7 +175,7 @@ function AccountSection() {
               <tr key={machine.id}>
                 <td>
                   {meta?.host ?? machine.id}
-                  {machine.id === localMachineId && <span className="settings-this-machine"> (this machine)</span>}
+                  {machine.id === localMachineId && <span className="settings-this-machine">{t('thisMachine')}</span>}
                 </td>
                 <td>{meta?.platform ?? '—'}</td>
                 <td>
@@ -191,7 +188,7 @@ function AccountSection() {
           {machines.length === 0 && (
             <tr>
               <td colSpan={3} className="settings-hint">
-                no machines found
+                {t('noMachinesFound')}
               </td>
             </tr>
           )}
@@ -216,10 +213,10 @@ function TerminalSection() {
   return (
     <div className="settings-section">
       <h2>{t('settingsTerminal')}</h2>
-      <p className="settings-hint">Controls for "Open in Terminal" in a session's "⋮" menu.</p>
+      <p className="settings-hint">{t('terminalHint')}</p>
 
       <label className="settings-field">
-        <span>Terminal app</span>
+        <span>{t('terminalApp')}</span>
         <select value={terminalApp} onChange={(event) => setTerminalApp(event.target.value as TerminalAppChoice)}>
           {(Object.keys(TERMINAL_APP_LABELS) as TerminalAppChoice[]).map((key) => (
             <option key={key} value={key}>
@@ -228,10 +225,10 @@ function TerminalSection() {
           ))}
         </select>
       </label>
-      <p className="settings-hint">macOS has no system-level default terminal to defer to, so this is happydeck's own setting.</p>
+      <p className="settings-hint">{t('terminalAppHint')}</p>
 
       <label className="settings-field">
-        <span>Open as</span>
+        <span>{t('openAs')}</span>
         <select value={terminalWindowMode} onChange={(event) => setTerminalWindowMode(event.target.value as TerminalWindowMode)}>
           {(Object.keys(TERMINAL_WINDOW_MODE_LABELS) as TerminalWindowMode[]).map((key) => (
             <option key={key} value={key}>
@@ -240,18 +237,15 @@ function TerminalSection() {
           ))}
         </select>
       </label>
-      <p className="settings-hint">"New tab" stacks onto whichever window is already open, if any.</p>
+      <p className="settings-hint">{t('openAsHint')}</p>
 
-      <h3>SSH targets</h3>
-      <p className="settings-hint">
-        Opening a session running on another machine opens a local Terminal/iTerm window and SSHes into it — you need
-        working key-based SSH access to that machine already (happydeck doesn't manage credentials).
-      </p>
+      <h3>{t('sshTargets')}</h3>
+      <p className="settings-hint">{t('sshTargetsHint')}</p>
       <table className="settings-machines-table">
         <thead>
           <tr>
-            <th>Device</th>
-            <th>SSH target</th>
+            <th>{t('device')}</th>
+            <th>{t('sshTarget')}</th>
           </tr>
         </thead>
         <tbody>
@@ -263,11 +257,11 @@ function TerminalSection() {
               <tr key={machine.id}>
                 <td>
                   {meta?.host ?? machine.id}
-                  {isLocal && <span className="settings-this-machine"> (this machine)</span>}
+                  {isLocal && <span className="settings-this-machine">{t('thisMachine')}</span>}
                 </td>
                 <td>
                   {isLocal ? (
-                    <span className="settings-hint">— (local, no SSH needed)</span>
+                    <span className="settings-hint">{t('localNoSshNeeded')}</span>
                   ) : (
                     <input
                       type="text"
@@ -285,7 +279,7 @@ function TerminalSection() {
           {machines.length === 0 && (
             <tr>
               <td colSpan={2} className="settings-hint">
-                no machines found
+                {t('noMachinesFound')}
               </td>
             </tr>
           )}
@@ -310,7 +304,7 @@ function PrivacySection() {
     <div className="settings-section">
       <h2>{t('settingsPrivacy')}</h2>
       <h3>{t('notifications')}</h3>
-      <p className="settings-hint">Which session events trigger a native Mac notification.</p>
+      <p className="settings-hint">{t('notificationsHint')}</p>
       {rows.map((row) => (
         <ToggleSwitch key={row.key} checked={notify[row.key]} onChange={(value) => setNotifyPref(row.key, value)} label={t(row.labelKey)} />
       ))}
@@ -319,6 +313,7 @@ function PrivacySection() {
 }
 
 function ClaudeMdSection() {
+  const t = useT();
   const machines = useHappyStore((s) => s.machines);
   const readMachineFile = useHappyStore((s) => s.readMachineFile);
   const writeMachineFile = useHappyStore((s) => s.writeMachineFile);
@@ -383,16 +378,13 @@ function ClaudeMdSection() {
 
   return (
     <div className="settings-section settings-section-claudemd">
-      <h2>CLAUDE.md</h2>
-      <p className="settings-hint">
-        View and edit each machine's global <code>~/.claude/CLAUDE.md</code> from here. Reads/writes go straight to that
-        machine's filesystem — no session needs to be running there.
-      </p>
+      <h2>{t('settingsClaudeMd')}</h2>
+      <p className="settings-hint">{t('claudeMdHint')}</p>
       <label className="settings-field">
-        <span>Machine</span>
+        <span>{t('machine')}</span>
         <select value={machineId} onChange={(event) => load(event.target.value)}>
           <option value="" disabled>
-            select…
+            {t('selectPlaceholder')}
           </option>
           {machines.map((machine) => {
             const host = (machine.metadata as { host?: string } | null)?.host ?? machine.id;
@@ -405,18 +397,18 @@ function ClaudeMdSection() {
         </select>
       </label>
 
-      {loading && <p className="settings-hint">loading…</p>}
+      {loading && <p className="settings-hint">{t('loading')}</p>}
       {error && <p className="settings-error">{error}</p>}
-      {isNewFile && !loading && <p className="settings-hint">No CLAUDE.md there yet — start typing and save to create one.</p>}
+      {isNewFile && !loading && <p className="settings-hint">{t('noClaudeMdYet')}</p>}
 
       {content !== null && !loading && (
         <>
           <textarea className="settings-claudemd-editor" value={content} onChange={(event) => setContent(event.target.value)} spellCheck={false} />
           <div className="settings-claudemd-actions">
             <button type="button" disabled={saving} onClick={save}>
-              {saving ? 'saving…' : 'save'}
+              {saving ? t('saving') : t('save')}
             </button>
-            {saved && <span className="settings-saved">saved</span>}
+            {saved && <span className="settings-saved">{t('saved')}</span>}
           </div>
         </>
       )}

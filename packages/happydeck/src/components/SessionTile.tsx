@@ -376,13 +376,6 @@ export function SessionTile({
             mcpServers={metadata?.mcpServers ?? []}
             onInsertSlashCommand={(command) => setDraft((d) => `${d}/${command} `)}
           />
-          <AgentSettingsPopover
-            permissionMode={metadata?.permissionMode ?? 'default'}
-            modelMode={metadata?.modelMode ?? 'default'}
-            effortLevel={metadata?.effortLevel ?? 'medium'}
-            busy={busy}
-            onChange={(patch) => runAction(() => setAgentModes(session.id, patch))}
-          />
           <textarea
             ref={composerInputRef}
             className="tile-composer-input"
@@ -397,11 +390,19 @@ export function SessionTile({
             }}
             onKeyDown={handleComposerKeyDown}
           />
+          <AgentSettingsPopover
+            permissionMode={metadata?.permissionMode ?? 'default'}
+            modelMode={metadata?.modelMode ?? 'default'}
+            effortLevel={metadata?.effortLevel ?? 'medium'}
+            busy={busy}
+            onChange={(patch) => runAction(() => setAgentModes(session.id, patch))}
+          />
           <button type="submit" className="tile-composer-send" disabled={busy || !draft.trim()} title={t('send')} aria-label={t('send')}>
-            <LuSendHorizontal size={40} strokeWidth={2} />
+            <LuSendHorizontal size={16} strokeWidth={2.25} />
           </button>
         </form>
         <AgentSettingsCaption
+          path={path}
           permissionMode={metadata?.permissionMode ?? 'default'}
           modelMode={metadata?.modelMode ?? 'default'}
           effortLevel={metadata?.effortLevel ?? 'medium'}

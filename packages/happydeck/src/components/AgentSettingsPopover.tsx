@@ -14,11 +14,14 @@ function labelOf(options: ModeOption[], key: string): string {
 }
 
 /**
- * Compact composer-row trigger (permission pill + model pill, opening
- * upward) for the full Model/Effort/Permission popover. The verbose
- * "model · effort · permission" summary lives separately, below the
- * composer box (see SessionTile) — this is just the quick-glance/
- * quick-switch affordance.
+ * Compact composer-row trigger, right edge (left of send) — two separately
+ * boxed badges (permission mode, model), each opening the same full
+ * Model/Effort/Permission popover upward. Two distinct badges, not one
+ * button with two spans next to each other: concatenated as "default
+ * ·opus" it read as if "default" were describing the model. The model
+ * badge NEVER shows the literal word "default" (see compactModelLabel) —
+ * the verbose "model · effort · permission" summary lives separately,
+ * below the composer box (see SessionTile), not crowded in here.
  */
 export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, busy, onChange }: AgentSettingsPopoverProps) {
   const [open, setOpen] = useState(false);
@@ -63,10 +66,14 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
 
   return (
     <div className="session-menu agent-settings" ref={rootRef}>
-      <button type="button" className="agent-settings-trigger" disabled={busy} onClick={() => setOpen((v) => !v)}>
-        <span className="agent-settings-pill">{labelOf(CLAUDE_PERMISSION_MODES, permissionMode)}</span>
-        <span className="agent-settings-pill">{compactModelLabel(modelMode)}</span>
-      </button>
+      <div className="agent-settings-badges">
+        <button type="button" className="agent-settings-badge agent-settings-badge-permission" disabled={busy} onClick={() => setOpen((v) => !v)}>
+          {labelOf(CLAUDE_PERMISSION_MODES, permissionMode)}
+        </button>
+        <button type="button" className="agent-settings-badge agent-settings-badge-model" disabled={busy} onClick={() => setOpen((v) => !v)}>
+          {compactModelLabel(modelMode)}
+        </button>
+      </div>
 
       {open && (
         <div className="session-menu-popover agent-settings-popover" onClick={(event) => event.stopPropagation()}>
@@ -81,11 +88,32 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
   );
 }
 
-/** Full "model · effort · permission" detail line — meant to sit below the composer box, not inside it. */
-export function AgentSettingsCaption({ permissionMode, modelMode, effortLevel }: { permissionMode: string; modelMode: string; effortLevel: string }) {
+/**
+ * Status footer below the composer box, mirroring the real Claude Code
+ * CLI's own status line (path | model | ...) as closely as our data
+ * supports — path and model/effort/permission are all in session metadata
+ * already. Context-window-used % is NOT: that's a CLI-local stat, never
+ * part of anything Happy's protocol sends us for classic sessions (only
+ * Rig-flavor sessions carry a contextWindow field at all, and that's a
+ * static limit, not live usage) — so it's left out rather than faked.
+ */
+export function AgentSettingsCaption({
+  path,
+  permissionMode,
+  modelMode,
+  effortLevel,
+}: {
+  path: string;
+  permissionMode: string;
+  modelMode: string;
+  effortLevel: string;
+}) {
   return (
-    <span className="tile-composer-caption">
-      {labelOf(CLAUDE_MODEL_MODES, modelMode)} · {labelOf(CLAUDE_EFFORT_LEVELS, effortLevel)} · {labelOf(CLAUDE_PERMISSION_MODES, permissionMode)}
-    </span>
+    <div className="tile-composer-caption">
+      <span className="tile-composer-caption-path">{path}</span>
+      <span className="tile-composer-caption-modes">
+        {labelOf(CLAUDE_MODEL_MODES, modelMode)} · {labelOf(CLAUDE_EFFORT_LEVELS, effortLevel)} · {labelOf(CLAUDE_PERMISSION_MODES, permissionMode)}
+      </span>
+    </div>
   );
 }
