@@ -3,7 +3,16 @@ import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES } fro
 import { type TranslationKey, useT } from '../lib/i18n';
 import { joinPath } from '../lib/paths';
 import { useHappyStore } from '../store/happyStore';
-import { FONT_LABELS, type FontChoice, LANGUAGE_LABELS, type Language, type NotificationPrefs, useSettingsStore } from '../store/settingsStore';
+import {
+  FONT_LABELS,
+  type FontChoice,
+  LANGUAGE_LABELS,
+  type Language,
+  type NotificationPrefs,
+  TERMINAL_APP_LABELS,
+  type TerminalAppChoice,
+  useSettingsStore,
+} from '../store/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 
 type Section = 'general' | 'account' | 'privacy' | 'claudemd';
@@ -66,6 +75,8 @@ function GeneralSection() {
   const setFont = useSettingsStore((s) => s.setFont);
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
+  const terminalApp = useSettingsStore((s) => s.terminalApp);
+  const setTerminalApp = useSettingsStore((s) => s.setTerminalApp);
   const defaultPermissionMode = useSettingsStore((s) => s.defaultPermissionMode);
   const defaultModelMode = useSettingsStore((s) => s.defaultModelMode);
   const defaultEffortLevel = useSettingsStore((s) => s.defaultEffortLevel);
@@ -98,6 +109,18 @@ function GeneralSection() {
         </select>
       </label>
       <p className="settings-hint">Applies to prose/UI text. Code and commands always stay monospace.</p>
+
+      <label className="settings-field">
+        <span>Terminal app</span>
+        <select value={terminalApp} onChange={(event) => setTerminalApp(event.target.value as TerminalAppChoice)}>
+          {(Object.keys(TERMINAL_APP_LABELS) as TerminalAppChoice[]).map((key) => (
+            <option key={key} value={key}>
+              {TERMINAL_APP_LABELS[key]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="settings-hint">Used by "Open in Terminal" in a session's "⋮" menu. macOS has no system-level default terminal to defer to, so this is happydeck's own setting.</p>
 
       <h3>Default new-session options</h3>
       <p className="settings-hint">Used as the starting point in the spawn panel — you can still change any of these per session.</p>

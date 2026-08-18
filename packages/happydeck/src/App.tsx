@@ -130,7 +130,14 @@ function App() {
   const onPanesDragOver = (event: DragEvent) => {
     if (!event.dataTransfer.types.includes(SESSION_DRAG_MIME)) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+    // Must match the drag source's effectAllowed ('copy', set in
+    // Sidebar.tsx's onDragStart) — a dropEffect outside that set is
+    // spec-legal for a UA to silently treat as an invalid drop target.
+    // Confirmed via a real OS-level drag (cliclick) in the actual Tauri
+    // WKWebView: with 'move' here, the drop never fired at all — no
+    // error, just nothing happened. Chromium/Playwright tolerated the
+    // mismatch, which is why this only showed up testing the real app.
+    event.dataTransfer.dropEffect = 'copy';
 
     // Snapshot every pane's and divider's rect once per drag gesture, the
     // moment it first hovers the pane area — never re-measure afterward.

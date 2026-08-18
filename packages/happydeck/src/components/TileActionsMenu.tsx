@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../lib/i18n';
 import { openInTerminal } from '../lib/openTerminal';
+import { useSettingsStore } from '../store/settingsStore';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface TileActionsMenuProps {
@@ -16,6 +17,7 @@ interface TileActionsMenuProps {
 /** The "⋮" menu in a session tile's header: abort / download / open-in-terminal / kill. Kill needs its own confirm. */
 export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, localPath }: TileActionsMenuProps) {
   const t = useT();
+  const terminalApp = useSettingsStore((s) => s.terminalApp);
   const [open, setOpen] = useState(false);
   const [confirmingKill, setConfirmingKill] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -77,7 +79,7 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, loca
             <button
               type="button"
               onClick={() => {
-                openInTerminal(localPath);
+                openInTerminal(localPath, terminalApp);
                 setOpen(false);
               }}
             >

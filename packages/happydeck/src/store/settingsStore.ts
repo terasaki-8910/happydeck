@@ -31,15 +31,30 @@ export const LANGUAGE_LABELS: Record<Language, string> = {
   ja: '日本語',
 };
 
+// macOS has no OS-level "default terminal" the way it has a default
+// browser — `openWith` always needs a specific app name. 'system' picks
+// happydeck's own best-effort per-platform guess (Terminal.app on macOS);
+// the other two are explicit user overrides, so switching terminal apps
+// later is a settings change, not a code change.
+export type TerminalAppChoice = 'system' | 'terminal' | 'iterm';
+
+export const TERMINAL_APP_LABELS: Record<TerminalAppChoice, string> = {
+  system: 'System default',
+  terminal: 'Terminal',
+  iterm: 'iTerm',
+};
+
 interface SettingsState {
   font: FontChoice;
   language: Language;
+  terminalApp: TerminalAppChoice;
   defaultPermissionMode: string;
   defaultModelMode: string;
   defaultEffortLevel: string;
   notify: NotificationPrefs;
   setFont: (font: FontChoice) => void;
   setLanguage: (language: Language) => void;
+  setTerminalApp: (terminalApp: TerminalAppChoice) => void;
   setDefaultAgentOptions: (opts: { permissionMode?: string; modelMode?: string; effortLevel?: string }) => void;
   setNotifyPref: (key: keyof NotificationPrefs, value: boolean) => void;
 }
@@ -49,12 +64,14 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       font: 'system',
       language: 'en',
+      terminalApp: 'system',
       defaultPermissionMode: 'default',
       defaultModelMode: 'default',
       defaultEffortLevel: 'medium',
       notify: { done: true, permission: true, question: true },
       setFont: (font) => set({ font }),
       setLanguage: (language) => set({ language }),
+      setTerminalApp: (terminalApp) => set({ terminalApp }),
       setDefaultAgentOptions: (opts) =>
         set((state) => ({
           defaultPermissionMode: opts.permissionMode ?? state.defaultPermissionMode,
