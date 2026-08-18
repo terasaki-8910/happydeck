@@ -27,6 +27,12 @@ export const CLAUDE_MODEL_MODES: ModeOption[] = [
   { key: 'fable', name: 'fable 5' },
   { key: 'sonnet', name: 'sonnet 4.6' },
   { key: 'haiku', name: 'haiku 4.5' },
+  // opusplan/fableplan aren't in the happy-app reference this file otherwise
+  // mirrors exactly — added on the user's own request, not independently
+  // verified against a CLI source. If Claude Code rejects either key, that'll
+  // surface as an agent-side error, not a happydeck bug.
+  { key: 'opusplan', name: 'opusplan (opus + sonnet)' },
+  { key: 'fableplan', name: 'fableplan (fable + opus + sonnet)' },
 ];
 
 export const CLAUDE_EFFORT_LEVELS: ModeOption[] = [
