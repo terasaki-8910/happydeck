@@ -1,0 +1,69 @@
+name: Release
+
+# Tag-push triggered, not on every push to main -- releasing on every commit
+# would spam GitHub Releases and isn't the standard pattern. Push a tag like
+# `happydeck-v0.1.0` to cut a release; workflow_dispatch is there for a manual
+# re-run without needing a new tag.
+on:
+  push:
+    tags:
+      - 'happydeck-v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macos-latest runners are Apple Silicon (arm64) -- this builds a
+          # native arm64-only .app, matching the actual Mac this is meant to
+          # run on. A universal (arm64+x86_64) build needs an extra rustup
+          # target and roughly doubles build time; add
+          # `args: --target universal-apple-darwin` here if Intel Mac support
+          # is ever needed.
+          - platform: macos-latest
+            args: ''
+          - platform: ubuntu-latest
+            args: ''
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux bundling dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: packages/happydeck/src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: packages/happydeck
+          tagName: ${{ github.ref_name }}
+          releaseName: 'happydeck ${{ github.ref_name }}'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
