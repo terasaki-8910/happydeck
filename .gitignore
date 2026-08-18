@@ -14,3 +14,6 @@ packages/happydeck/src-tauri/target/
 
 # Scratch dirs (e.g. throwaway spawned-session test targets)
 .scratch/
+
+# Playwright MCP test-run artifacts (snapshots, console logs)
+.playwright-mcp/
