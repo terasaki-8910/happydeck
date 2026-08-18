@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { LuSendHorizontal } from 'react-icons/lu';
+import { LuSendHorizontal, LuSparkles } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { downloadTranscript } from '../lib/exportTranscript';
@@ -77,6 +77,7 @@ export function SessionTile({
 }: SessionTileProps) {
   const t = useT();
   const localMachineId = useHappyStore((s) => s.localMachineId);
+  const machines = useHappyStore((s) => s.machines);
   const sendMessage = useHappyStore((s) => s.sendMessage);
   const setAgentModes = useHappyStore((s) => s.setAgentModes);
   const renameSession = useHappyStore((s) => s.renameSession);
@@ -87,6 +88,7 @@ export function SessionTile({
   const isSelected = useSelectionStore((s) => s.selected.has(session.id));
   const toggleSelected = useSelectionStore((s) => s.toggle);
   const terminalApp = useSettingsStore((s) => s.terminalApp);
+  const sshTargets = useSettingsStore((s) => s.sshTargets);
   const runMachineBash = useHappyStore((s) => s.runMachineBash);
 
   const [draft, setDraft] = useState('');
@@ -114,9 +116,13 @@ export function SessionTile({
     | null;
   const path = metadata?.path ?? session.id;
   const title = deriveTitle(session.metadata, session.messages) ?? path;
-  // Opening a real Terminal/iTerm window only makes sense for a path that
-  // exists on this machine — a remote session's path lives on its own box.
-  const localPath = metadata?.path && metadata.machineId === localMachineId ? metadata.path : undefined;
+  // "Open in Terminal" is local-only when the session's machine IS this
+  // machine; otherwise it SSHes out to that machine (see openTerminal.ts) —
+  // still shown, not hidden, when no SSH target is configured yet, so the
+  // menu item stays discoverable and the error names the fix (Settings).
+  const isLocalSession = metadata?.machineId === localMachineId;
+  const remoteMachine = !isLocalSession && metadata?.machineId ? machines.find((m) => m.id === metadata.machineId) : undefined;
+  const remoteMachinePlatform = (remoteMachine?.metadata as { platform?: string } | null)?.platform;
   const agentState = session.agentState as AgentState | null;
   const pendingRequests = Object.entries(agentState?.requests ?? {});
   const visibleMessages = session.messages
@@ -281,7 +287,18 @@ export function SessionTile({
           onDownload={() => runAction(() => downloadTranscript(session))}
           onKill={() => runAction(() => killSession(session.id))}
           onOpenTerminal={
-            localPath && localMachineId ? () => runAction(() => openInTerminal(localMachineId, localPath, terminalApp, runMachineBash)) : undefined
+            metadata?.path && localMachineId
+              ? () =>
+                  runAction(() => {
+                    if (isLocalSession) return openInTerminal(localMachineId, metadata.path as string, terminalApp, runMachineBash);
+                    const sshTarget = metadata.machineId ? sshTargets[metadata.machineId] : undefined;
+                    if (!sshTarget) throw new Error(`No SSH target configured for ${metadata.host ?? 'this machine'} — set one in Settings > Account.`);
+                    return openInTerminal(localMachineId, metadata.path as string, terminalApp, runMachineBash, {
+                      sshTarget,
+                      platform: remoteMachinePlatform,
+                    });
+                  })
+              : undefined
           }
         />
       </header>
@@ -341,6 +358,16 @@ export function SessionTile({
             mcpServers={metadata?.mcpServers ?? []}
             onInsertSlashCommand={(command) => setDraft((d) => `${d}/${command} `)}
           />
+          <button
+            type="button"
+            className="tile-composer-summarize"
+            disabled={busy}
+            title={t('summarizeProgress')}
+            aria-label={t('summarizeProgress')}
+            onClick={() => runAction(() => sendMessage(session.id, t('summarizeProgressPrompt')))}
+          >
+            <LuSparkles size={15} strokeWidth={2} />
+          </button>
           <input
             className="tile-composer-input"
             value={draft}

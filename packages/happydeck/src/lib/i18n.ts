@@ -41,6 +41,8 @@ const STRINGS = {
     sessionFinished: 'Session finished',
     permissionNeeded: 'Permission needed',
     questionFromAgent: 'Question from agent',
+    summarizeProgress: 'Summarize progress',
+    summarizeProgressPrompt: 'Briefly summarize your current progress on this task in 1-2 sentences.',
   },
   ja: {
     newSession: '+ 新規セッション',
@@ -76,6 +78,8 @@ const STRINGS = {
     sessionFinished: 'セッション完了',
     permissionNeeded: '許可が必要',
     questionFromAgent: 'エージェントからの質問',
+    summarizeProgress: '進捗を要約',
+    summarizeProgressPrompt: '現在の進捗を1〜2文で簡潔に要約してください。',
   },
 } satisfies Record<Language, Record<string, string>>;
 

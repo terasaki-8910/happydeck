@@ -52,11 +52,18 @@ interface SettingsState {
   defaultModelMode: string;
   defaultEffortLevel: string;
   notify: NotificationPrefs;
+  // Per-machine "user@host" (or ~/.ssh/config alias) used by "Open in
+  // Terminal" for a session running on a machine other than this one — Happy's
+  // own protocol has no remote-shell mechanism, so this reuses the SSH access
+  // the user already has to their other machines over Tailscale. Keyed by
+  // Happy machineId, not host, so it survives a machine's host/IP changing.
+  sshTargets: Record<string, string>;
   setFont: (font: FontChoice) => void;
   setLanguage: (language: Language) => void;
   setTerminalApp: (terminalApp: TerminalAppChoice) => void;
   setDefaultAgentOptions: (opts: { permissionMode?: string; modelMode?: string; effortLevel?: string }) => void;
   setNotifyPref: (key: keyof NotificationPrefs, value: boolean) => void;
+  setSshTarget: (machineId: string, target: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -69,6 +76,7 @@ export const useSettingsStore = create<SettingsState>()(
       defaultModelMode: 'default',
       defaultEffortLevel: 'medium',
       notify: { done: true, permission: true, question: true },
+      sshTargets: {},
       setFont: (font) => set({ font }),
       setLanguage: (language) => set({ language }),
       setTerminalApp: (terminalApp) => set({ terminalApp }),
@@ -79,6 +87,13 @@ export const useSettingsStore = create<SettingsState>()(
           defaultEffortLevel: opts.effortLevel ?? state.defaultEffortLevel,
         })),
       setNotifyPref: (key, value) => set((state) => ({ notify: { ...state.notify, [key]: value } })),
+      setSshTarget: (machineId, target) =>
+        set((state) => {
+          const sshTargets = { ...state.sshTargets };
+          if (target.trim()) sshTargets[machineId] = target.trim();
+          else delete sshTargets[machineId];
+          return { sshTargets };
+        }),
     }),
     { name: 'happydeck-settings' },
   ),

@@ -163,6 +163,9 @@ function AccountSection() {
   const t = useT();
   const localMachineId = useHappyStore((s) => s.localMachineId);
   const machines = useHappyStore((s) => s.machines);
+  const sshTargets = useSettingsStore((s) => s.sshTargets);
+  const setSshTarget = useSettingsStore((s) => s.setSshTarget);
+  const [sshDraft, setSshDraft] = useState<Record<string, string>>({});
 
   return (
     <div className="settings-section">
@@ -179,34 +182,55 @@ function AccountSection() {
             <th>Device</th>
             <th>Platform</th>
             <th>Status</th>
+            <th>SSH target (for "Open in Terminal")</th>
           </tr>
         </thead>
         <tbody>
           {machines.map((machine) => {
             const meta = machine.metadata as { host?: string; platform?: string } | null;
+            const isLocal = machine.id === localMachineId;
+            const draft = sshDraft[machine.id] ?? sshTargets[machine.id] ?? '';
             return (
               <tr key={machine.id}>
                 <td>
                   {meta?.host ?? machine.id}
-                  {machine.id === localMachineId && <span className="settings-this-machine"> (this machine)</span>}
+                  {isLocal && <span className="settings-this-machine"> (this machine)</span>}
                 </td>
                 <td>{meta?.platform ?? '—'}</td>
                 <td>
                   <span className={`status-dot ${machine.active ? 'status-online' : 'status-offline'}`} />
                   {machine.active ? t('statusOnline') : t('statusOffline')}
                 </td>
+                <td>
+                  {isLocal ? (
+                    <span className="settings-hint">— (local, no SSH needed)</span>
+                  ) : (
+                    <input
+                      type="text"
+                      className="settings-ssh-target-input"
+                      placeholder="user@host"
+                      value={draft}
+                      onChange={(event) => setSshDraft((prev) => ({ ...prev, [machine.id]: event.target.value }))}
+                      onBlur={() => setSshTarget(machine.id, draft)}
+                    />
+                  )}
+                </td>
               </tr>
             );
           })}
           {machines.length === 0 && (
             <tr>
-              <td colSpan={3} className="settings-hint">
+              <td colSpan={4} className="settings-hint">
                 no machines found
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      <p className="settings-hint">
+        "Open in Terminal" on a session running on another machine opens a local Terminal/iTerm window and SSHes into
+        it — you need working key-based SSH access to that machine already (happydeck doesn't manage credentials).
+      </p>
     </div>
   );
 }

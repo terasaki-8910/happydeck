@@ -1654,6 +1654,23 @@ body {
   font-size: 10.5px;
 }
 
+.settings-ssh-target-input {
+  width: 100%;
+  min-width: 140px;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.settings-ssh-target-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .toggle-switch-row {
   display: flex;
   align-items: center;
