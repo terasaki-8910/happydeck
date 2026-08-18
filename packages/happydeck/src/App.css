@@ -191,6 +191,18 @@ body {
   flex-shrink: 0;
 }
 
+/* At collapsedSize=52px, the mark + toggle side by side overflowed the
+   available width (mark 16px + gap + a ~30px toggle button, against ~28px
+   of padding-adjusted room) -- the toggle was rendering half outside the
+   rail, reading as "swallowed by the border". Stacking them removes the
+   width constraint entirely instead of trying to shrink either further. */
+.sidebar-collapsed .sidebar-brand {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 6px;
+}
+
 .sidebar-brand-mark {
   width: 16px;
   height: 16px;
@@ -332,10 +344,6 @@ body {
 .sidebar-footer-icon:hover {
   color: var(--text);
   background: var(--bg);
-}
-
-.sidebar-collapsed .sidebar-footer {
-  flex-direction: column;
 }
 
 /* Spawn (new session) and tabs (workspaces / new tab) read as ONE
