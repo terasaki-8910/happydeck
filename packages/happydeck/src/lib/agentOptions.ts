@@ -27,12 +27,14 @@ export const CLAUDE_MODEL_MODES: ModeOption[] = [
   { key: 'fable', name: 'fable 5' },
   { key: 'sonnet', name: 'sonnet 4.6' },
   { key: 'haiku', name: 'haiku 4.5' },
-  // opusplan/fableplan aren't in the happy-app reference this file otherwise
-  // mirrors exactly — added on the user's own request, not independently
-  // verified against a CLI source. If Claude Code rejects either key, that'll
-  // surface as an agent-side error, not a happydeck bug.
+  // opusplan: not in the happy-app reference's hardcoded list either, but a
+  // real, documented Claude Code CLI mode (Opus for planning, Sonnet for
+  // execution) as far as general knowledge goes — kept.
   { key: 'opusplan', name: 'opusplan (opus + sonnet)' },
-  { key: 'fableplan', name: 'fableplan (fable + opus + sonnet)' },
+  // fableplan was here too, added purely on request with no verification at
+  // all (not in the reference, and no independent confirmation it's a real
+  // accepted CLI value, unlike opusplan) -- removed rather than ship a
+  // likely-broken option. Re-add if you've actually seen it work.
 ];
 
 export const CLAUDE_EFFORT_LEVELS: ModeOption[] = [
@@ -42,3 +44,20 @@ export const CLAUDE_EFFORT_LEVELS: ModeOption[] = [
   { key: 'xhigh', name: 'xhigh' },
   { key: 'max', name: 'max' },
 ];
+
+/**
+ * Short, composer-pill-friendly model name — never the literal "default"
+ * (per explicit request: always show what it concretely resolves to), and
+ * collapses opus-5/opus-4.8 into one "opus" label (explicitly OK'd — the
+ * full popover list below still keeps them separate as real distinct
+ * --model values).
+ *
+ * The "default" resolution to 'opus' is sourced from happy-cli's own
+ * fallback (`DEFAULT_CLAUDE_MODEL = 'opus'` in claude/runClaude.ts) — not a
+ * guess, but also not guaranteed to match every CLI version out there.
+ */
+export function compactModelLabel(modelMode: string): string {
+  if (modelMode === 'default') return 'opus';
+  if (modelMode === 'claude-opus-5' || modelMode === 'opus') return 'opus';
+  return modelMode;
+}
