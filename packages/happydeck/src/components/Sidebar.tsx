@@ -1,6 +1,6 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { type RefObject, useEffect, useState } from 'react';
-import { LuPanelLeft, LuSparkles } from 'react-icons/lu';
+import { type RefObject, useEffect } from 'react';
+import { LuPanelLeft, LuPin } from 'react-icons/lu';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import happydeckMark from '../assets/happydeck-mark.svg';
 import { type LiveSession, useHappyStore } from '../store/happyStore';
@@ -35,12 +35,21 @@ function statusClassOf(session: LiveSession): string {
 }
 
 /**
- * The sidebar's second line: the agent's own most recent reply, so
- * "what is this session actually doing right now" is visible at a glance
- * without opening it. The sparkle button (below) just gives you a way to
- * ask for a fresh one on demand — this always shows whatever's latest,
- * asked-for or not. Falls back to the working directory when no agent text
+ * The sidebar's second line: the agent's own most recent reply, so "what is
+ * this session actually doing right now" is visible at a glance without
+ * opening it or sending anything — purely reads data already fetched for
+ * the transcript. Falls back to the working directory when no agent text
  * exists yet (a brand-new session).
+ *
+ * There was briefly a button here that PUSHED a "summarize your progress"
+ * prompt into every online session on demand — removed. It clobbered text
+ * the user was actively typing directly into a session's own terminal at
+ * the time, because sending a message to a live CLI process races with
+ * local keyboard input on the same stdin. Real work was lost. Don't rebuild
+ * this as "send a live message" again — read-only derivation from already-
+ * fetched messages (like this function does) is the safe shape; a future
+ * version should summarize a downloaded transcript instead, never inject
+ * anything into a running session.
  */
 // Combined "host: title" is one line now (was host above, title below), so
 // a long default mDNS hostname (MacBook-Air.local) was eating most of the
@@ -141,19 +150,7 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
   const pinnedIds = usePinStore((s) => s.pinnedIds);
   const localMachineId = useHappyStore((s) => s.localMachineId);
   const machines = useHappyStore((s) => s.machines);
-  const sendMessage = useHappyStore((s) => s.sendMessage);
   const localHost = (machines.find((m) => m.id === localMachineId)?.metadata as { host?: string } | null)?.host;
-  const [summarizingAll, setSummarizingAll] = useState(false);
-
-  const onlineSessions = sessions.filter((s) => s.active);
-  const summarizeAll = async () => {
-    setSummarizingAll(true);
-    try {
-      await Promise.all(onlineSessions.map((s) => sendMessage(s.id, t('summarizeProgressPrompt')).catch(() => undefined)));
-    } finally {
-      setSummarizingAll(false);
-    }
-  };
 
   // Auto-collapse only fires at the moment the breakpoint is crossed, so it
   // never fights a manual toggle (or a manual drag-resize) made while
@@ -205,29 +202,20 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
         </div>
       )}
 
-      {!collapsed && ordered.length > 0 && (
-        <div className="sidebar-sessions-header">
-          <span className="sidebar-section-label">Sessions</span>
-          <button
-            type="button"
-            className="sidebar-summarize-all"
-            disabled={summarizingAll || onlineSessions.length === 0}
-            title="Ask every online session to report its current progress — updates the status line under each session below."
-            onClick={summarizeAll}
-          >
-            <LuSparkles size={12} strokeWidth={2} />
-          </button>
-        </div>
-      )}
-
       <nav className="sidebar-sessions">
         {pinned.length > 0 && (
           <>
-            {!collapsed && <span className="sidebar-section-label sidebar-section-label-inline">{t('pinned')}</span>}
+            {!collapsed && (
+              <span className="sidebar-section-label sidebar-section-label-inline">
+                <LuPin size={10} strokeWidth={2.5} />
+                {t('pinned')}
+              </span>
+            )}
             {pinned.map((session) => (
               <SessionRow key={session.id} session={session} collapsed={collapsed} active={session.id === focusedSessionId} />
             ))}
             <div className="sidebar-divider" />
+            {!collapsed && rest.length > 0 && <span className="sidebar-section-label sidebar-section-label-inline">{t('chats')}</span>}
           </>
         )}
         {rest.map((session) => (
