@@ -126,7 +126,13 @@ export function SessionMenu({ session, title, pinned, workspaces, onTogglePin, o
                     runAction(async () => {
                       const result = (await onResume()) as { type: string; errorMessage?: string } | undefined;
                       if (result && result.type !== 'success') {
-                        throw new Error(result.errorMessage || `Resume failed: ${result.type}`);
+                        const raw = result.errorMessage || `Resume failed: ${result.type}`;
+                        // "RPC method Not Available" specifically means that
+                        // machine's daemon never registered a resume handler
+                        // — only happens with no local Happy Agent Auth set
+                        // up (~/.happy/agent.key) on THAT machine, a one-time
+                        // setup step there, not fixable from here.
+                        throw new Error(/not available/i.test(raw) ? `Resume isn't set up on that machine yet — it needs its own local Happy Agent Auth (~/.happy/agent.key). (${raw})` : raw);
                       }
                     }).then((ok) => ok && setOpen(false))
                   }

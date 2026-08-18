@@ -1,12 +1,13 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { type RefObject, useEffect } from 'react';
-import { LuPanelLeft, LuPin } from 'react-icons/lu';
+import { LuPanelLeft, LuPin, LuSearch } from 'react-icons/lu';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import happydeckMark from '../assets/happydeck-mark.svg';
 import { type LiveSession, useHappyStore } from '../store/happyStore';
 import { SESSION_DRAG_MIME } from '../lib/dnd';
 import { messageRole, renderablePart } from '../lib/formatMessage';
 import { useT } from '../lib/i18n';
+import { basename } from '../lib/paths';
 import { byRecency } from '../lib/sessionOrder';
 import { deriveTitle } from '../lib/sessionTitle';
 import { usePinStore } from '../store/pinStore';
@@ -90,8 +91,12 @@ function SessionRow({ session, collapsed, active }: SessionRowProps) {
 
   const metadata = session.metadata as { path?: string; host?: string } | null;
   const path = metadata?.path ?? session.id;
-  const label = deriveTitle(session.metadata, session.messages) ?? path;
-  const statusLine = deriveStatusLine(session, path);
+  // The sidebar row is narrow — the full absolute path was just getting
+  // arbitrarily cut off by the ellipsis anyway. The last segment is the
+  // meaningful part (the project/directory name); the full path is still
+  // available in the row's own title tooltip.
+  const label = deriveTitle(session.metadata, session.messages) ?? basename(path);
+  const statusLine = deriveStatusLine(session, basename(path));
 
   return (
     <div
@@ -147,6 +152,7 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
   const t = useT();
   const collapsed = useViewStore((s) => s.sidebarCollapsed);
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen);
+  const setSearchOpen = useViewStore((s) => s.setSearchOpen);
   const pinnedIds = usePinStore((s) => s.pinnedIds);
   const localMachineId = useHappyStore((s) => s.localMachineId);
   const machines = useHappyStore((s) => s.machines);
@@ -231,13 +237,16 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
               {localHost}
             </span>
           )}
-          <button type="button" className="sidebar-footer-icon" title="Settings (⌘,)" onClick={() => setSettingsOpen(true)}>
+          <button type="button" className="sidebar-footer-icon" title={`${t('search')} (⌘F)`} onClick={() => setSearchOpen(true)}>
+            <LuSearch size={15} strokeWidth={2} />
+          </button>
+          <button type="button" className="sidebar-footer-icon" title={`${t('settings')} (⌘,)`} onClick={() => setSettingsOpen(true)}>
             <GearIcon />
           </button>
           <button
             type="button"
             className="sidebar-footer-icon"
-            title="Open this project on GitHub"
+            title={t('openOnGithub')}
             onClick={() => openUrl(GITHUB_URL)}
           >
             <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">

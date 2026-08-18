@@ -21,6 +21,7 @@ import {
   decodeBase64,
   fetchLatestMessages,
   fetchMachines,
+  fetchOlderMessages,
   fetchSessions,
   machineCreateDirectory,
   machineListDirectory,
@@ -68,6 +69,10 @@ export interface AgentState {
 export interface LiveSession extends DecryptedSession {
   messages: DecryptedMessage[];
   thinking: boolean;
+  /** True if the server has older messages beyond what's currently loaded (see loadOlderMessages). */
+  hasMoreMessages: boolean;
+  /** Set while loadOlderMessages is in flight for this session, so the UI can't fire it twice concurrently. */
+  loadingOlderMessages?: boolean;
 }
 
 interface HappyStoreState {
@@ -77,6 +82,7 @@ interface HappyStoreState {
   sessions: LiveSession[];
   machines: DecryptedMachine[];
   bootstrap: () => Promise<void>;
+  loadOlderMessages: (sessionId: string) => Promise<void>;
   sendMessage: (sessionId: string, text: string, meta?: SendMessageMeta) => Promise<void>;
   setAgentModes: (sessionId: string, patch: SessionAgentModesPatch) => Promise<void>;
   allowRequest: (sessionId: string, requestId: string) => Promise<void>;
@@ -199,11 +205,13 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
         await Promise.allSettled(
           allSessions.map(async (session) => {
             const encryptor = sessionEncryptors.get(session.id)!;
-            const messages = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, session.id, 20));
-            return { ...session, messages: [...messages].reverse(), thinking: false };
+            const page = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, session.id));
+            return { ...session, messages: page.messages, hasMoreMessages: page.hasMore, thinking: false };
           }),
         )
-      ).map((result, i) => (result.status === 'fulfilled' ? result.value : { ...allSessions[i], messages: [], thinking: false }));
+      ).map((result, i) =>
+        result.status === 'fulfilled' ? result.value : { ...allSessions[i], messages: [], hasMoreMessages: false, thinking: false },
+      );
 
       set({ status: 'ready', localMachineId, sessions: liveSessions, machines: allMachines });
 
@@ -269,11 +277,11 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
               if (!found) return;
               sessionEncryptors.set(found.id, encryption.openEncryption(found.dataKey));
               const encryptor = sessionEncryptors.get(found.id)!;
-              const messages = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, found.id, 20));
+              const page = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, found.id));
               set((state) =>
                 state.sessions.some((s) => s.id === found.id)
                   ? state
-                  : { sessions: [...state.sessions, { ...found, messages: [...messages].reverse(), thinking: false }] },
+                  : { sessions: [...state.sessions, { ...found, messages: page.messages, hasMoreMessages: page.hasMore, thinking: false }] },
               );
             });
             return;
@@ -326,6 +334,29 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
       document.addEventListener('visibilitychange', reportAppState);
     } catch (error) {
       set({ status: 'error', error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  async loadOlderMessages(sessionId) {
+    if (MOCK_ENABLED) return;
+    const session = get().sessions.find((s) => s.id === sessionId);
+    if (!session || !session.hasMoreMessages || session.loadingOlderMessages || session.messages.length === 0) return;
+    const encryptor = sessionEncryptors.get(sessionId);
+    if (!encryptor) return;
+    set((state) => ({ sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, loadingOlderMessages: true } : s)) }));
+    try {
+      const oldestLoadedSeq = session.messages[0].seq;
+      const page = await fetchOlderMessages(requireHttp(), encryptor, sessionId, oldestLoadedSeq);
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === sessionId
+            ? { ...s, messages: [...page.messages, ...s.messages], hasMoreMessages: page.hasMore, loadingOlderMessages: false }
+            : s,
+        ),
+      }));
+    } catch (error) {
+      set((state) => ({ sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, loadingOlderMessages: false } : s)) }));
+      throw error;
     }
   },
 

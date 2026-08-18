@@ -30,6 +30,18 @@
      isn't redefined in the light overrides below. */
   --toggle-knob-on: #0b0b0c;
 
+  /* Official Claude Code permission-mode colors, sourced from happy-app's
+     own theme.ts (theme.colors.permission.*) — not guessed. "plan" is
+     green in the real app, not blue/cyan. "dontAsk" has no official
+     mapping there (it's Claude-specific, absent from the semantic-kind
+     ternary that colors these) — left neutral rather than invented.
+     These are theme.ts's dark-mode values; light-mode values (slightly
+     different, e.g. plan #34C759 vs #32D74B) are set in the light block
+     below, same as every other token here. */
+  --permission-plan: #32d74b;
+  --permission-accept-edits: #0a84ff;
+  --permission-bypass: #ff9f0a;
+
   --font-ui:
     -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-mono: 'SF Mono', ui-monospace, 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
@@ -51,6 +63,9 @@
     --danger: #dc2626;
     --danger-border: #f0b8b8;
     --link: #2563eb;
+    --permission-plan: #34c759;
+    --permission-accept-edits: #007aff;
+    --permission-bypass: #ff9500;
   }
 }
 
@@ -66,6 +81,9 @@
   --danger: #dc2626;
   --danger-border: #f0b8b8;
   --link: #2563eb;
+  --permission-plan: #34c759;
+  --permission-accept-edits: #007aff;
+  --permission-bypass: #ff9500;
 }
 
 * {
@@ -1138,6 +1156,28 @@ body {
   margin: 0;
 }
 
+.tile-load-older {
+  align-self: center;
+  margin-bottom: 4px;
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.tile-load-older:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.tile-load-older:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .message-row {
   display: flex;
 }
@@ -2048,4 +2088,108 @@ body {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* Anchored higher than a centered confirm dialog — a search palette reads
+   better started near the top third of the screen (Spotlight/Cmd+K
+   convention) than dead-center. */
+.search-backdrop {
+  align-items: flex-start;
+  padding-top: 14vh;
+}
+
+.search-dialog {
+  display: flex;
+  flex-direction: column;
+  width: 560px;
+  max-width: calc(100vw - 40px);
+  max-height: 60vh;
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.search-input {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  padding: 14px 16px;
+}
+
+.search-input:focus {
+  outline: none;
+}
+
+.search-results {
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-empty {
+  padding: 16px;
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+.search-result {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.search-result:hover {
+  background: var(--bg);
+}
+
+.search-result-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.search-result-host {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.search-result-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.search-result-snippet {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.search-result-snippet strong {
+  color: var(--accent);
+  font-weight: 700;
 }

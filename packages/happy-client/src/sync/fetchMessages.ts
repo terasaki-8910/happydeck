@@ -5,6 +5,15 @@ import type { Decryptor, Encryptor } from '../crypto/encryptor';
 // Int4 max, per the server's sentinel for "give me the latest page".
 const SEQ_BACKWARD_INITIAL_SENTINEL = 2_147_483_647;
 
+// Server-documented default/max for this endpoint (see .claude/plans —
+// "既定100・最大500"). The client-side default here matches the server's
+// own default rather than an arbitrarily smaller number: fetching only 20
+// messages per session at bootstrap meant almost any real session's actual
+// history started out of reach with no way to get to it — see
+// fetchOlderMessages below for how a session with more than this reaches
+// its earlier messages.
+const DEFAULT_PAGE_LIMIT = 100;
+
 interface RawMessage {
   id: string;
   seq: number;
@@ -27,28 +36,55 @@ export interface DecryptedMessage {
   content: unknown | null;
 }
 
-/**
- * Fetches the newest `limit` messages of a session (GET .../messages?before_seq=<max>)
- * and decrypts them with the session's own encryptor (get it from
- * `encryption.openEncryption(session.dataKey)`, using the `dataKey` returned
- * by fetchSessions for that same session — NOT a fresh lookup).
- */
-export async function fetchLatestMessages(
+export interface MessagesPage {
+  /** Oldest-first, matching how callers append/prepend into a running transcript. */
+  messages: DecryptedMessage[];
+  /** True if there are still-older messages beyond this page (server-reported, not inferred from page size). */
+  hasMore: boolean;
+}
+
+async function fetchMessagesPage(
   http: HttpClient,
   encryptor: Encryptor & Decryptor,
   sessionId: string,
-  limit = 20,
-): Promise<DecryptedMessage[]> {
-  const query = new URLSearchParams({ before_seq: String(SEQ_BACKWARD_INITIAL_SENTINEL), limit: String(limit) });
+  beforeSeq: number,
+  limit: number,
+): Promise<MessagesPage> {
+  const query = new URLSearchParams({ before_seq: String(beforeSeq), limit: String(limit) });
   const response = await http.get<MessagesResponse>(`/v3/sessions/${sessionId}/messages?${query.toString()}`);
 
   const encryptedBlobs = response.messages.map((message) => decodeBase64(message.content.c, 'base64'));
   const decryptedContents = await encryptor.decrypt(encryptedBlobs);
 
-  return response.messages.map((message, index) => ({
-    id: message.id,
-    seq: message.seq,
-    createdAt: message.createdAt,
-    content: decryptedContents[index] ?? null,
-  }));
+  const messages = response.messages
+    .map((message, index) => ({
+      id: message.id,
+      seq: message.seq,
+      createdAt: message.createdAt,
+      content: decryptedContents[index] ?? null,
+    }))
+    .reverse();
+
+  return { messages, hasMore: response.hasMore };
+}
+
+/** The newest page of a session's messages — what bootstrap loads initially. */
+export function fetchLatestMessages(
+  http: HttpClient,
+  encryptor: Encryptor & Decryptor,
+  sessionId: string,
+  limit = DEFAULT_PAGE_LIMIT,
+): Promise<MessagesPage> {
+  return fetchMessagesPage(http, encryptor, sessionId, SEQ_BACKWARD_INITIAL_SENTINEL, limit);
+}
+
+/** The page immediately older than `oldestLoadedSeq` — for a "load older messages" action once the newest page's `hasMore` is true. */
+export function fetchOlderMessages(
+  http: HttpClient,
+  encryptor: Encryptor & Decryptor,
+  sessionId: string,
+  oldestLoadedSeq: number,
+  limit = DEFAULT_PAGE_LIMIT,
+): Promise<MessagesPage> {
+  return fetchMessagesPage(http, encryptor, sessionId, oldestLoadedSeq, limit);
 }

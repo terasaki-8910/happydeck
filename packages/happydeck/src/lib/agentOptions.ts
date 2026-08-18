@@ -61,3 +61,19 @@ export function compactModelLabel(modelMode: string): string {
   if (modelMode === 'claude-opus-5' || modelMode === 'opus') return 'opus';
   return modelMode;
 }
+
+/**
+ * The CSS custom-property name for a permission mode's official Claude Code
+ * color, or null for a mode with no official color (rendered as the usual
+ * neutral text color instead of inventing one). Sourced from happy-app's
+ * theme.ts (theme.colors.permission.*), not guessed — notably "plan" is
+ * green there, not blue/cyan. "dontAsk" has no entry in that source either
+ * (Claude-specific, outside the semantic-kind set that gets colored), so
+ * it's left null rather than assigned an unverified color.
+ */
+export function permissionColorVar(permissionMode: string): string | null {
+  if (permissionMode === 'plan') return '--permission-plan';
+  if (permissionMode === 'acceptEdits') return '--permission-accept-edits';
+  if (permissionMode === 'bypassPermissions') return '--permission-bypass';
+  return null;
+}

@@ -5,6 +5,7 @@ import { BulkActionBar } from './components/BulkActionBar';
 import { LinkDeviceView } from './components/LinkDeviceView';
 import { PaneTreeView } from './components/PaneTreeView';
 import { SessionTile } from './components/SessionTile';
+import { SearchModal } from './components/SearchModal';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
 import { SESSION_DRAG_MIME } from './lib/dnd';
@@ -72,6 +73,9 @@ function App() {
   const setSidebarCollapsed = useViewStore((s) => s.setSidebarCollapsed);
   const toggleSettings = useViewStore((s) => s.toggleSettings);
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen);
+  const searchOpen = useViewStore((s) => s.searchOpen);
+  const toggleSearch = useViewStore((s) => s.toggleSearch);
+  const setSearchOpen = useViewStore((s) => s.setSearchOpen);
 
   const [hover, setHover] = useState<PaneHover | null>(null);
   const leafElsRef = useRef(new Map<string, HTMLElement>());
@@ -103,11 +107,14 @@ function App() {
       if (event.key === ',' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         toggleSettings();
+      } else if (event.key === 'f' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        toggleSearch();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toggleSettings]);
+  }, [toggleSettings, toggleSearch]);
 
   // Skipped in mock mode — getCurrentWebview() needs the real Tauri
   // runtime, which a plain browser tab (used for UI-only mock testing)
@@ -332,6 +339,7 @@ function App() {
       </Group>
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {searchOpen && <SearchModal onClose={() => setSearchOpen(false)} />}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LuSendHorizontal } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -85,6 +85,7 @@ export function SessionTile({
   const denyRequest = useHappyStore((s) => s.denyRequest);
   const abortSession = useHappyStore((s) => s.abortSession);
   const resumeSession = useHappyStore((s) => s.resumeSession);
+  const loadOlderMessages = useHappyStore((s) => s.loadOlderMessages);
   const killSession = useHappyStore((s) => s.killSession);
   const isSelected = useSelectionStore((s) => s.selected.has(session.id));
   const toggleSelected = useSelectionStore((s) => s.toggle);
@@ -103,6 +104,8 @@ export function SessionTile({
   const messagesRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const pendingOlderLoadScrollHeightRef = useRef<number | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
   const status = statusOf(session);
   const metadata = session.metadata as
@@ -142,6 +145,34 @@ export function SessionTile({
       el.scrollTop = el.scrollHeight;
     }
   }, [visibleMessages.length]);
+
+  // Prepending older messages grows the content ABOVE the current scroll
+  // position — without this, the browser leaves scrollTop's pixel value
+  // unchanged, which visually jumps the reader to different content
+  // (everything they were looking at shifts down by the height of what
+  // just got inserted above it). Runs before paint so there's no visible
+  // flash of the wrong scroll position.
+  useLayoutEffect(() => {
+    const el = messagesRef.current;
+    const prevHeight = pendingOlderLoadScrollHeightRef.current;
+    if (el && prevHeight !== null) {
+      el.scrollTop += el.scrollHeight - prevHeight;
+      pendingOlderLoadScrollHeightRef.current = null;
+    }
+  }, [visibleMessages.length]);
+
+  const handleLoadOlder = async () => {
+    const el = messagesRef.current;
+    pendingOlderLoadScrollHeightRef.current = el?.scrollHeight ?? null;
+    setLoadingOlder(true);
+    try {
+      await loadOlderMessages(session.id);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
 
   const handleMessagesScroll = () => {
     const el = messagesRef.current;
@@ -308,7 +339,25 @@ export function SessionTile({
           title={title}
           busy={busy}
           onAbort={() => runAction(() => abortSession(session.id))}
-          onResume={() => runAction(() => resumeSession(session.id))}
+          onResume={() =>
+            runAction(async () => {
+              const result = await resumeSession(session.id);
+              if (result.type === 'success') return;
+              // resumeSession resolves (doesn't throw) on a business-logic
+              // failure — was silently swallowed here before, since
+              // runAction only surfaces thrown errors. "RPC method Not
+              // Available" specifically means that machine's daemon never
+              // registered a resume handler at all, which only happens
+              // when it has no local Happy Agent Auth set up (~/.happy/agent.key)
+              // — a one-time setup step on THAT machine, not something
+              // fixable from here.
+              const raw = result.type === 'error' ? result.errorMessage : result.type;
+              const message = /not available/i.test(raw)
+                ? `Resume isn't set up on that machine yet — it needs its own local Happy Agent Auth (~/.happy/agent.key) before it can register a resume handler. (${raw})`
+                : raw;
+              throw new Error(message);
+            })
+          }
           onDownload={() => runAction(() => downloadTranscript(session))}
           onKill={() => runAction(() => killSession(session.id))}
           onOpenTerminal={
@@ -347,6 +396,11 @@ export function SessionTile({
       {actionError && <p className="tile-action-error">{actionError}</p>}
 
       <div className="tile-messages" ref={messagesRef} onScroll={handleMessagesScroll}>
+        {session.hasMoreMessages && (
+          <button type="button" className="tile-load-older" disabled={loadingOlder} onClick={handleLoadOlder}>
+            {loadingOlder ? t('loadingOlder') : t('loadOlderMessages')}
+          </button>
+        )}
         {visibleMessages.length === 0 && <p className="tile-empty">{t('noMessages')}</p>}
         {visibleMessages.map(({ message, part }) => {
           const role = messageRole(message.content);

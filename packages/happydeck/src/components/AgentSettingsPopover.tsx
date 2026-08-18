@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES, compactModelLabel, type ModeOption } from '../lib/agentOptions';
+import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES, compactModelLabel, permissionColorVar, type ModeOption } from '../lib/agentOptions';
 
 interface AgentSettingsPopoverProps {
   permissionMode: string;
@@ -46,28 +46,40 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
   const section = (title: string, options: ModeOption[], current: string, key: 'permissionMode' | 'modelMode' | 'effortLevel') => (
     <div className="agent-settings-section">
       <span className="session-menu-label">{title}</span>
-      {options.map((option) => (
-        <button
-          key={option.key}
-          type="button"
-          className="agent-settings-row"
-          disabled={busy}
-          onClick={() => {
-            onChange({ [key]: option.key });
-            setOpen(false);
-          }}
-        >
-          <span>{option.name}</span>
-          {option.key === current && <span className="agent-settings-check">✓</span>}
-        </button>
-      ))}
+      {options.map((option) => {
+        const colorVar = key === 'permissionMode' ? permissionColorVar(option.key) : null;
+        return (
+          <button
+            key={option.key}
+            type="button"
+            className="agent-settings-row"
+            disabled={busy}
+            style={colorVar ? { color: `var(${colorVar})` } : undefined}
+            onClick={() => {
+              onChange({ [key]: option.key });
+              setOpen(false);
+            }}
+          >
+            <span>{option.name}</span>
+            {option.key === current && <span className="agent-settings-check">✓</span>}
+          </button>
+        );
+      })}
     </div>
   );
+
+  const permissionColorVarName = permissionColorVar(permissionMode);
 
   return (
     <div className="session-menu agent-settings" ref={rootRef}>
       <div className="agent-settings-badges">
-        <button type="button" className="agent-settings-badge agent-settings-badge-permission" disabled={busy} onClick={() => setOpen((v) => !v)}>
+        <button
+          type="button"
+          className="agent-settings-badge agent-settings-badge-permission"
+          disabled={busy}
+          style={permissionColorVarName ? { color: `var(${permissionColorVarName})` } : undefined}
+          onClick={() => setOpen((v) => !v)}
+        >
           {labelOf(CLAUDE_PERMISSION_MODES, permissionMode)}
         </button>
         <button type="button" className="agent-settings-badge agent-settings-badge-model" disabled={busy} onClick={() => setOpen((v) => !v)}>

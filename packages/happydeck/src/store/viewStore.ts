@@ -29,6 +29,7 @@ interface ViewState {
   initialized: boolean;
   sidebarCollapsed: boolean;
   settingsOpen: boolean;
+  searchOpen: boolean;
   /**
    * Click a sidebar session. If a split is already open, this replaces the
    * active pane in place (like clicking a file in an IDE's active editor
@@ -52,6 +53,8 @@ interface ViewState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSettings: () => void;
   setSettingsOpen: (open: boolean) => void;
+  toggleSearch: () => void;
+  setSearchOpen: (open: boolean) => void;
 }
 
 export const useViewStore = create<ViewState>((set, get) => ({
@@ -60,6 +63,7 @@ export const useViewStore = create<ViewState>((set, get) => ({
   initialized: false,
   sidebarCollapsed: typeof window !== 'undefined' ? window.innerWidth < 640 : false,
   settingsOpen: false,
+  searchOpen: false,
 
   focusSession: (sessionId) =>
     set((state) => {
@@ -124,4 +128,6 @@ export const useViewStore = create<ViewState>((set, get) => ({
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
   toggleSettings: () => set((state) => ({ settingsOpen: !state.settingsOpen })),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
+  toggleSearch: () => set((state) => ({ searchOpen: !state.searchOpen })),
+  setSearchOpen: (open) => set({ searchOpen: open }),
 }));

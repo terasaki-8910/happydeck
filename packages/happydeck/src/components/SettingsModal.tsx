@@ -29,6 +29,30 @@ const SECTIONS: { id: Section; labelKey: TranslationKey }[] = [
   { id: 'claudemd', labelKey: 'settingsClaudeMd' },
 ];
 
+const THEME_OPTION_KEY: Record<Theme, TranslationKey> = {
+  system: 'themeOptionSystem',
+  light: 'themeOptionLight',
+  dark: 'themeOptionDark',
+};
+
+const FONT_OPTION_KEY: Record<FontChoice, TranslationKey> = {
+  system: 'fontOptionSystem',
+  inter: 'fontOptionInter',
+  rounded: 'fontOptionRounded',
+  compact: 'fontOptionCompact',
+};
+
+const TERMINAL_APP_OPTION_KEY: Record<TerminalAppChoice, TranslationKey> = {
+  system: 'terminalAppOptionSystem',
+  terminal: 'terminalAppOptionTerminal',
+  iterm: 'terminalAppOptionIterm',
+};
+
+const WINDOW_MODE_OPTION_KEY: Record<TerminalWindowMode, TranslationKey> = {
+  tab: 'windowModeOptionTab',
+  window: 'windowModeOptionWindow',
+};
+
 interface SettingsModalProps {
   onClose: () => void;
 }
@@ -61,7 +85,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           ))}
         </nav>
         <div className="settings-content">
-          <button type="button" className="settings-close" title="Close (Esc)" onClick={onClose}>
+          <button type="button" className="settings-close" title={`${t('close')} (Esc)`} onClick={onClose}>
             ×
           </button>
           {section === 'general' && <GeneralSection />}
@@ -97,7 +121,7 @@ function GeneralSection() {
         <select value={theme} onChange={(event) => setTheme(event.target.value as Theme)}>
           {(Object.keys(THEME_LABELS) as Theme[]).map((key) => (
             <option key={key} value={key}>
-              {THEME_LABELS[key]}
+              {t(THEME_OPTION_KEY[key])}
             </option>
           ))}
         </select>
@@ -121,7 +145,7 @@ function GeneralSection() {
         <select value={font} onChange={(event) => setFont(event.target.value as FontChoice)}>
           {(Object.keys(FONT_LABELS) as FontChoice[]).map((key) => (
             <option key={key} value={key}>
-              {FONT_LABELS[key]}
+              {t(FONT_OPTION_KEY[key])}
             </option>
           ))}
         </select>
@@ -236,7 +260,7 @@ function TerminalSection() {
         <select value={terminalApp} onChange={(event) => setTerminalApp(event.target.value as TerminalAppChoice)}>
           {(Object.keys(TERMINAL_APP_LABELS) as TerminalAppChoice[]).map((key) => (
             <option key={key} value={key}>
-              {TERMINAL_APP_LABELS[key]}
+              {t(TERMINAL_APP_OPTION_KEY[key])}
             </option>
           ))}
         </select>
@@ -248,7 +272,7 @@ function TerminalSection() {
         <select value={terminalWindowMode} onChange={(event) => setTerminalWindowMode(event.target.value as TerminalWindowMode)}>
           {(Object.keys(TERMINAL_WINDOW_MODE_LABELS) as TerminalWindowMode[]).map((key) => (
             <option key={key} value={key}>
-              {TERMINAL_WINDOW_MODE_LABELS[key]}
+              {t(WINDOW_MODE_OPTION_KEY[key])}
             </option>
           ))}
         </select>

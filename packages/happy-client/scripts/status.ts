@@ -108,7 +108,7 @@ async function main() {
   if (targetSession) {
     console.log(`\n=== Latest messages: ${targetSession.id} ===`);
     const encryptor = encryption.openEncryption(targetSession.dataKey);
-    const messages = await withTokenRefresh(() => fetchLatestMessages(http, encryptor, targetSession.id, 10));
+    const { messages } = await withTokenRefresh(() => fetchLatestMessages(http, encryptor, targetSession.id, 10));
     if (messages.length === 0) {
       console.log('  (no messages)');
     }
