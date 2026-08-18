@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { FiSend } from 'react-icons/fi';
+import { LuSendHorizontal } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { downloadTranscript } from '../lib/exportTranscript';
@@ -87,6 +87,7 @@ export function SessionTile({
   const isSelected = useSelectionStore((s) => s.selected.has(session.id));
   const toggleSelected = useSelectionStore((s) => s.toggle);
   const terminalApp = useSettingsStore((s) => s.terminalApp);
+  const runMachineBash = useHappyStore((s) => s.runMachineBash);
 
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -279,7 +280,9 @@ export function SessionTile({
           onAbort={() => runAction(() => abortSession(session.id))}
           onDownload={() => runAction(() => downloadTranscript(session))}
           onKill={() => runAction(() => killSession(session.id))}
-          onOpenTerminal={localPath ? () => runAction(() => openInTerminal(localPath, terminalApp)) : undefined}
+          onOpenTerminal={
+            localPath && localMachineId ? () => runAction(() => openInTerminal(localMachineId, localPath, terminalApp, runMachineBash)) : undefined
+          }
         />
       </header>
 
@@ -351,7 +354,7 @@ export function SessionTile({
             onKeyDown={handleComposerKeyDown}
           />
           <button type="submit" className="tile-composer-send" disabled={busy || !draft.trim()} title={t('send')} aria-label={t('send')}>
-            <FiSend size={68} strokeWidth={2.25} />
+            <LuSendHorizontal size={23} strokeWidth={2.25} />
           </button>
         </form>
       </div>

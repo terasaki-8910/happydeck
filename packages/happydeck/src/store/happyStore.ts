@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {
+  type BashResult,
   type CreateDirectoryResult,
   type DecryptedMachine,
   type DecryptedMessage,
@@ -25,6 +26,7 @@ import {
   machineListDirectory,
   machineReadFile,
   machineResumeSession,
+  machineRunBash,
   machineSpawnNewSession,
   machineWriteFile,
   mintToken,
@@ -84,6 +86,7 @@ interface HappyStoreState {
   spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>;
   listMachineDirectory: (machineId: string, path: string) => Promise<ListDirectoryResult>;
   createMachineDirectory: (machineId: string, path: string, platform: string) => Promise<CreateDirectoryResult>;
+  runMachineBash: (machineId: string, command: string) => Promise<BashResult>;
   resumeSession: (sessionId: string) => Promise<SpawnSessionResult>;
   deleteSession: (sessionId: string) => Promise<void>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
@@ -378,6 +381,13 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
     return machineCreateDirectory(requireSocket(), machineId, encryptor, path, platform);
+  },
+
+  async runMachineBash(machineId, command) {
+    if (MOCK_ENABLED) return { success: true, stdout: '', stderr: '' };
+    const encryptor = machineEncryptors.get(machineId);
+    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    return machineRunBash(requireSocket(), machineId, encryptor, command);
   },
 
   async resumeSession(sessionId) {

@@ -1307,8 +1307,8 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0;
-  width: 80px;
-  height: 80px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
 }
 

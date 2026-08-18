@@ -67,20 +67,28 @@ export async function machineWriteFile(
   return { success: true };
 }
 
-export type CreateDirectoryResult = { success: true } | { success: false; error: string };
-
-type RawBashResult = { success: boolean; stdout: string; stderr: string; exitCode: number; error?: string };
+export type BashResult = { success: true; stdout: string; stderr: string } | { success: false; error: string };
 
 /**
- * Creates a directory (including any missing parents) via the machine
- * daemon. There's no dedicated mkdir RPC verb — `happy-cli`'s common
- * handler set only registers listDirectory/readFile/writeFile/
- * getDirectoryTree/ripgrep/difftastic/bash, all unsandboxed at the
- * machine level — so this shells out through the same `bash` RPC used
- * for the "run a script" feature elsewhere, which is registered the same
- * unsandboxed way as listDirectory (confirmed by reading the handler
- * registration source directly, not assumed).
+ * Runs a shell command via the machine daemon. There's no dedicated verb
+ * for most one-off machine-side actions (mkdir, opening a local terminal
+ * app, etc.) — `happy-cli`'s common handler set only registers
+ * listDirectory/readFile/writeFile/getDirectoryTree/ripgrep/difftastic/
+ * bash, all unsandboxed at the machine level (confirmed by reading the
+ * handler registration source directly, not assumed) — so this is the
+ * general-purpose escape hatch every machine-scoped "do a thing" feature
+ * in happydeck shells out through.
  */
+export async function machineRunBash(socket: Socket, machineId: string, encryptor: Encryptor & Decryptor, command: string): Promise<BashResult> {
+  type RawBashResult = { success: boolean; stdout: string; stderr: string; exitCode: number; error?: string };
+  const result = await machineRPC<RawBashResult, { command: string }>(socket, machineId, 'bash', { command }, encryptor);
+  if (!result.success) return { success: false, error: result.error || result.stderr || 'command failed' };
+  return { success: true, stdout: result.stdout, stderr: result.stderr };
+}
+
+export type CreateDirectoryResult = { success: true } | { success: false; error: string };
+
+/** Creates a directory (including any missing parents) via machineRunBash — see its own doc for why there's no dedicated mkdir verb. */
 export async function machineCreateDirectory(
   socket: Socket,
   machineId: string,
@@ -89,7 +97,6 @@ export async function machineCreateDirectory(
   platform: string,
 ): Promise<CreateDirectoryResult> {
   const command = platform === 'win32' ? `mkdir "${path}"` : `mkdir -p "${path}"`;
-  const result = await machineRPC<RawBashResult, { command: string }>(socket, machineId, 'bash', { command }, encryptor);
-  if (!result.success) return { success: false, error: result.error || result.stderr || 'mkdir failed' };
-  return { success: true };
+  const result = await machineRunBash(socket, machineId, encryptor, command);
+  return result.success ? { success: true } : result;
 }
