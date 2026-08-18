@@ -44,10 +44,19 @@ export const TERMINAL_APP_LABELS: Record<TerminalAppChoice, string> = {
   iterm: 'iTerm',
 };
 
+/** Whether "Open in Terminal" opens a new tab in the existing window, or a new window. */
+export type TerminalWindowMode = 'tab' | 'window';
+
+export const TERMINAL_WINDOW_MODE_LABELS: Record<TerminalWindowMode, string> = {
+  tab: 'New tab',
+  window: 'New window',
+};
+
 interface SettingsState {
   font: FontChoice;
   language: Language;
   terminalApp: TerminalAppChoice;
+  terminalWindowMode: TerminalWindowMode;
   defaultPermissionMode: string;
   defaultModelMode: string;
   defaultEffortLevel: string;
@@ -61,6 +70,7 @@ interface SettingsState {
   setFont: (font: FontChoice) => void;
   setLanguage: (language: Language) => void;
   setTerminalApp: (terminalApp: TerminalAppChoice) => void;
+  setTerminalWindowMode: (mode: TerminalWindowMode) => void;
   setDefaultAgentOptions: (opts: { permissionMode?: string; modelMode?: string; effortLevel?: string }) => void;
   setNotifyPref: (key: keyof NotificationPrefs, value: boolean) => void;
   setSshTarget: (machineId: string, target: string) => void;
@@ -72,6 +82,7 @@ export const useSettingsStore = create<SettingsState>()(
       font: 'system',
       language: 'en',
       terminalApp: 'system',
+      terminalWindowMode: 'window',
       defaultPermissionMode: 'default',
       defaultModelMode: 'default',
       defaultEffortLevel: 'medium',
@@ -80,6 +91,7 @@ export const useSettingsStore = create<SettingsState>()(
       setFont: (font) => set({ font }),
       setLanguage: (language) => set({ language }),
       setTerminalApp: (terminalApp) => set({ terminalApp }),
+      setTerminalWindowMode: (terminalWindowMode) => set({ terminalWindowMode }),
       setDefaultAgentOptions: (opts) =>
         set((state) => ({
           defaultPermissionMode: opts.permissionMode ?? state.defaultPermissionMode,

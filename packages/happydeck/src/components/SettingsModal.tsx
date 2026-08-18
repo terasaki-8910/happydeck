@@ -11,14 +11,17 @@ import {
   type NotificationPrefs,
   TERMINAL_APP_LABELS,
   type TerminalAppChoice,
+  TERMINAL_WINDOW_MODE_LABELS,
+  type TerminalWindowMode,
   useSettingsStore,
 } from '../store/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 
-type Section = 'general' | 'account' | 'privacy' | 'claudemd';
+type Section = 'general' | 'terminal' | 'account' | 'privacy' | 'claudemd';
 
 const SECTIONS: { id: Section; labelKey: TranslationKey }[] = [
   { id: 'general', labelKey: 'settingsGeneral' },
+  { id: 'terminal', labelKey: 'settingsTerminal' },
   { id: 'account', labelKey: 'settingsAccount' },
   { id: 'privacy', labelKey: 'settingsPrivacy' },
   { id: 'claudemd', labelKey: 'settingsClaudeMd' },
@@ -60,6 +63,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             ×
           </button>
           {section === 'general' && <GeneralSection />}
+          {section === 'terminal' && <TerminalSection />}
           {section === 'account' && <AccountSection />}
           {section === 'privacy' && <PrivacySection />}
           {section === 'claudemd' && <ClaudeMdSection />}
@@ -75,8 +79,6 @@ function GeneralSection() {
   const setFont = useSettingsStore((s) => s.setFont);
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
-  const terminalApp = useSettingsStore((s) => s.terminalApp);
-  const setTerminalApp = useSettingsStore((s) => s.setTerminalApp);
   const defaultPermissionMode = useSettingsStore((s) => s.defaultPermissionMode);
   const defaultModelMode = useSettingsStore((s) => s.defaultModelMode);
   const defaultEffortLevel = useSettingsStore((s) => s.defaultEffortLevel);
@@ -109,18 +111,6 @@ function GeneralSection() {
         </select>
       </label>
       <p className="settings-hint">Applies to prose/UI text. Code and commands always stay monospace.</p>
-
-      <label className="settings-field">
-        <span>Terminal app</span>
-        <select value={terminalApp} onChange={(event) => setTerminalApp(event.target.value as TerminalAppChoice)}>
-          {(Object.keys(TERMINAL_APP_LABELS) as TerminalAppChoice[]).map((key) => (
-            <option key={key} value={key}>
-              {TERMINAL_APP_LABELS[key]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p className="settings-hint">Used by "Open in Terminal" in a session's "⋮" menu. macOS has no system-level default terminal to defer to, so this is happydeck's own setting.</p>
 
       <h3>Default new-session options</h3>
       <p className="settings-hint">Used as the starting point in the spawn panel — you can still change any of these per session.</p>
@@ -163,9 +153,6 @@ function AccountSection() {
   const t = useT();
   const localMachineId = useHappyStore((s) => s.localMachineId);
   const machines = useHappyStore((s) => s.machines);
-  const sshTargets = useSettingsStore((s) => s.sshTargets);
-  const setSshTarget = useSettingsStore((s) => s.setSshTarget);
-  const [sshDraft, setSshDraft] = useState<Record<string, string>>({});
 
   return (
     <div className="settings-section">
@@ -182,12 +169,94 @@ function AccountSection() {
             <th>Device</th>
             <th>Platform</th>
             <th>Status</th>
-            <th>SSH target (for "Open in Terminal")</th>
           </tr>
         </thead>
         <tbody>
           {machines.map((machine) => {
             const meta = machine.metadata as { host?: string; platform?: string } | null;
+            return (
+              <tr key={machine.id}>
+                <td>
+                  {meta?.host ?? machine.id}
+                  {machine.id === localMachineId && <span className="settings-this-machine"> (this machine)</span>}
+                </td>
+                <td>{meta?.platform ?? '—'}</td>
+                <td>
+                  <span className={`status-dot ${machine.active ? 'status-online' : 'status-offline'}`} />
+                  {machine.active ? t('statusOnline') : t('statusOffline')}
+                </td>
+              </tr>
+            );
+          })}
+          {machines.length === 0 && (
+            <tr>
+              <td colSpan={3} className="settings-hint">
+                no machines found
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TerminalSection() {
+  const t = useT();
+  const localMachineId = useHappyStore((s) => s.localMachineId);
+  const machines = useHappyStore((s) => s.machines);
+  const terminalApp = useSettingsStore((s) => s.terminalApp);
+  const setTerminalApp = useSettingsStore((s) => s.setTerminalApp);
+  const terminalWindowMode = useSettingsStore((s) => s.terminalWindowMode);
+  const setTerminalWindowMode = useSettingsStore((s) => s.setTerminalWindowMode);
+  const sshTargets = useSettingsStore((s) => s.sshTargets);
+  const setSshTarget = useSettingsStore((s) => s.setSshTarget);
+  const [sshDraft, setSshDraft] = useState<Record<string, string>>({});
+
+  return (
+    <div className="settings-section">
+      <h2>{t('settingsTerminal')}</h2>
+      <p className="settings-hint">Controls for "Open in Terminal" in a session's "⋮" menu.</p>
+
+      <label className="settings-field">
+        <span>Terminal app</span>
+        <select value={terminalApp} onChange={(event) => setTerminalApp(event.target.value as TerminalAppChoice)}>
+          {(Object.keys(TERMINAL_APP_LABELS) as TerminalAppChoice[]).map((key) => (
+            <option key={key} value={key}>
+              {TERMINAL_APP_LABELS[key]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="settings-hint">macOS has no system-level default terminal to defer to, so this is happydeck's own setting.</p>
+
+      <label className="settings-field">
+        <span>Open as</span>
+        <select value={terminalWindowMode} onChange={(event) => setTerminalWindowMode(event.target.value as TerminalWindowMode)}>
+          {(Object.keys(TERMINAL_WINDOW_MODE_LABELS) as TerminalWindowMode[]).map((key) => (
+            <option key={key} value={key}>
+              {TERMINAL_WINDOW_MODE_LABELS[key]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="settings-hint">"New tab" stacks onto whichever window is already open, if any.</p>
+
+      <h3>SSH targets</h3>
+      <p className="settings-hint">
+        Opening a session running on another machine opens a local Terminal/iTerm window and SSHes into it — you need
+        working key-based SSH access to that machine already (happydeck doesn't manage credentials).
+      </p>
+      <table className="settings-machines-table">
+        <thead>
+          <tr>
+            <th>Device</th>
+            <th>SSH target</th>
+          </tr>
+        </thead>
+        <tbody>
+          {machines.map((machine) => {
+            const meta = machine.metadata as { host?: string } | null;
             const isLocal = machine.id === localMachineId;
             const draft = sshDraft[machine.id] ?? sshTargets[machine.id] ?? '';
             return (
@@ -195,11 +264,6 @@ function AccountSection() {
                 <td>
                   {meta?.host ?? machine.id}
                   {isLocal && <span className="settings-this-machine"> (this machine)</span>}
-                </td>
-                <td>{meta?.platform ?? '—'}</td>
-                <td>
-                  <span className={`status-dot ${machine.active ? 'status-online' : 'status-offline'}`} />
-                  {machine.active ? t('statusOnline') : t('statusOffline')}
                 </td>
                 <td>
                   {isLocal ? (
@@ -220,17 +284,13 @@ function AccountSection() {
           })}
           {machines.length === 0 && (
             <tr>
-              <td colSpan={4} className="settings-hint">
+              <td colSpan={2} className="settings-hint">
                 no machines found
               </td>
             </tr>
           )}
         </tbody>
       </table>
-      <p className="settings-hint">
-        "Open in Terminal" on a session running on another machine opens a local Terminal/iTerm window and SSHes into
-        it — you need working key-based SSH access to that machine already (happydeck doesn't manage credentials).
-      </p>
     </div>
   );
 }
