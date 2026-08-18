@@ -36,6 +36,7 @@ import {
   sendSessionMessage,
   sessionAbort,
   sessionAllow,
+  sessionArchive,
   sessionDelete,
   sessionDeny,
   sessionKill,
@@ -467,7 +468,21 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   },
 
   async killSession(sessionId) {
-    await sessionKill(requireSocket(), sessionId, requireSessionEncryptor(sessionId));
+    if (MOCK_ENABLED) {
+      set((state) => ({ sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, active: false, thinking: false } : s)) }));
+      return;
+    }
+    try {
+      await sessionKill(requireSocket(), sessionId, requireSessionEncryptor(sessionId));
+    } catch {
+      // Kill can legitimately fail to even reach an already-dead process —
+      // archive below is the documented fallback for exactly this, so a
+      // kill-specific failure shouldn't block it.
+    }
+    await sessionArchive(requireHttp(), sessionId);
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, active: false, thinking: false } : s)),
+    }));
   },
 
   async spawnSession(options) {

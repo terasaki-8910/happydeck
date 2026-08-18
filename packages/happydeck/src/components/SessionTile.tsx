@@ -3,6 +3,7 @@ import { LuLoaderCircle, LuSendHorizontal } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { buildAttachmentDir, buildAttachmentPath, extensionForMimeType, relativeAttachmentPath } from '../lib/attachments';
+import { writeAttachmentFile } from '../lib/chunkedFileWrite';
 import { downloadTranscript } from '../lib/exportTranscript';
 import { attachDisconnectedError, cwdNotKnownError, sshTargetMissingError, unknownAttachMachineError } from '../lib/errorMessages';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
@@ -267,8 +268,7 @@ export function SessionTile({
       for (const [index, file] of files.entries()) {
         const fileName = file.name || `pasted-${index + 1}.${extensionForMimeType(file.type)}`;
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const result = await writeMachineBinaryFile(machineId, buildAttachmentPath(attachDir, fileName), bytes);
-        if (!result.success) throw new Error(result.error);
+        await writeAttachmentFile(runMachineBash, writeMachineBinaryFile, machineId, platform, buildAttachmentPath(attachDir, fileName), bytes);
         relativePaths.push(relativeAttachmentPath(cwd, attachDir, fileName));
       }
 
@@ -327,6 +327,14 @@ export function SessionTile({
   };
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // While an IME composition is active (converting kana to kanji, etc.),
+    // Enter confirms the selected candidate — it isn't "the user pressed
+    // Enter to send" at all. Every keydown handler below assumed plain
+    // Enter always meant submit, which made it impossible to convert text
+    // without accidentally sending mid-conversion. isComposing is the
+    // standard signal for this (set by the browser for the whole
+    // composition, including the confirming Enter itself).
+    if (event.nativeEvent.isComposing) return;
     // Bypasses the browser's own native undo stack (see useUndoableState for
     // why: it desyncs whenever the draft is set programmatically, e.g. a
     // slash command or attachment reference). Cmd+Shift+Z is the Mac

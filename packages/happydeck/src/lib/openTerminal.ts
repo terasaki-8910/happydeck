@@ -7,7 +7,7 @@ function appleScriptString(value: string): string {
 }
 
 /** Escapes a string for embedding as a single-quoted POSIX shell argument. */
-function shellSingleQuote(value: string): string {
+export function shellSingleQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 

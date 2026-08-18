@@ -91,3 +91,20 @@ export function sessionKill(socket: Socket, sessionId: string, encryptor: Sessio
 export function sessionDelete(http: HttpClient, sessionId: string): Promise<void> {
   return http.delete(`/v1/sessions/${sessionId}`);
 }
+
+/**
+ * Force-deactivates a session directly on the server (plain bearer-authed
+ * REST, sets `active: false` unconditionally and pushes a live update to
+ * every client — see happy-server's sessionRoutes.ts). sessionKill only
+ * asks the CLI process to exit; happy-cli's own handler responds success
+ * without waiting for the process to actually finish tearing down, and the
+ * server's own detection that it's gone (if kill can't reach it at all,
+ * e.g. it's already dead) otherwise depends on a heartbeat reaper that can
+ * lag by several minutes. This is the reference client's own documented
+ * fallback for exactly that gap ("use this when sessionKill can't reach
+ * it") — call it after sessionKill regardless of whether the kill RPC
+ * itself succeeded, so the UI reflects "killed" immediately either way.
+ */
+export function sessionArchive(http: HttpClient, sessionId: string): Promise<void> {
+  return http.post(`/v1/sessions/${sessionId}/archive`, {});
+}
