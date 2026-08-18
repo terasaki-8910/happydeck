@@ -8,8 +8,10 @@ import { SessionTile } from './components/SessionTile';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
 import { SESSION_DRAG_MIME } from './lib/dnd';
+import { MOCK_ENABLED } from './lib/mockData';
 import { type DropZone, insertAtGap, insertAtOuterEdge, insertAtZone, type OuterEdge, paneTreeSessionIds, zoneFromPointer } from './lib/paneTree';
 import { mostRecentSession } from './lib/sessionOrder';
+import { installZoomHotkeys } from './lib/zoomHotkeys';
 import { useHappyStore } from './store/happyStore';
 import { FONT_STACKS, useSettingsStore } from './store/settingsStore';
 import { useViewStore } from './store/viewStore';
@@ -97,6 +99,14 @@ function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [toggleSettings]);
+
+  // Skipped in mock mode — getCurrentWebview() needs the real Tauri
+  // runtime, which a plain browser tab (used for UI-only mock testing)
+  // doesn't have.
+  useEffect(() => {
+    if (MOCK_ENABLED) return;
+    return installZoomHotkeys();
+  }, []);
 
   // Land on the most-recently-active session's panes view by default, once —
   // this never runs again after the user (or a tab click) picks a view.

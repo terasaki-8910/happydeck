@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../lib/i18n';
-import { openInTerminal } from '../lib/openTerminal';
-import { useSettingsStore } from '../store/settingsStore';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface TileActionsMenuProps {
@@ -10,14 +8,13 @@ interface TileActionsMenuProps {
   onAbort: () => void;
   onDownload: () => void;
   onKill: () => void;
-  /** The session's working directory, only when it's running on this machine — opening a real terminal window only makes sense for a path that actually exists locally. Undefined hides the option. */
-  localPath?: string;
+  /** Present only when this session is running on this machine — opening a real terminal window only makes sense for a path that actually exists locally. Undefined hides the option. Routed through the parent's runAction so a failure (e.g. Terminal.app missing) surfaces in the tile's error banner instead of failing silently. */
+  onOpenTerminal?: () => void;
 }
 
 /** The "⋮" menu in a session tile's header: abort / download / open-in-terminal / kill. Kill needs its own confirm. */
-export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, localPath }: TileActionsMenuProps) {
+export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, onOpenTerminal }: TileActionsMenuProps) {
   const t = useT();
-  const terminalApp = useSettingsStore((s) => s.terminalApp);
   const [open, setOpen] = useState(false);
   const [confirmingKill, setConfirmingKill] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -75,11 +72,12 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, loca
           >
             {t('downloadTranscript')}
           </button>
-          {localPath && (
+          {onOpenTerminal && (
             <button
               type="button"
+              disabled={busy}
               onClick={() => {
-                openInTerminal(localPath, terminalApp);
+                onOpenTerminal();
                 setOpen(false);
               }}
             >

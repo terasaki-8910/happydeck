@@ -66,3 +66,30 @@ export async function machineWriteFile(
   if (!result.success) return result;
   return { success: true };
 }
+
+export type CreateDirectoryResult = { success: true } | { success: false; error: string };
+
+type RawBashResult = { success: boolean; stdout: string; stderr: string; exitCode: number; error?: string };
+
+/**
+ * Creates a directory (including any missing parents) via the machine
+ * daemon. There's no dedicated mkdir RPC verb — `happy-cli`'s common
+ * handler set only registers listDirectory/readFile/writeFile/
+ * getDirectoryTree/ripgrep/difftastic/bash, all unsandboxed at the
+ * machine level — so this shells out through the same `bash` RPC used
+ * for the "run a script" feature elsewhere, which is registered the same
+ * unsandboxed way as listDirectory (confirmed by reading the handler
+ * registration source directly, not assumed).
+ */
+export async function machineCreateDirectory(
+  socket: Socket,
+  machineId: string,
+  encryptor: Encryptor & Decryptor,
+  path: string,
+  platform: string,
+): Promise<CreateDirectoryResult> {
+  const command = platform === 'win32' ? `mkdir "${path}"` : `mkdir -p "${path}"`;
+  const result = await machineRPC<RawBashResult, { command: string }>(socket, machineId, 'bash', { command }, encryptor);
+  if (!result.success) return { success: false, error: result.error || result.stderr || 'mkdir failed' };
+  return { success: true };
+}

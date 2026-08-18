@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {
+  type CreateDirectoryResult,
   type DecryptedMachine,
   type DecryptedMessage,
   type DecryptedSession,
@@ -20,6 +21,7 @@ import {
   fetchLatestMessages,
   fetchMachines,
   fetchSessions,
+  machineCreateDirectory,
   machineListDirectory,
   machineReadFile,
   machineResumeSession,
@@ -36,7 +38,7 @@ import {
   updateSessionAgentModes,
   updateSessionSummary,
 } from 'happy-client';
-import { MOCK_ENABLED, mockListDirectory, mockMachines, mockSessions } from '../lib/mockData';
+import { buildMockSession, MOCK_ENABLED, mockCreateDirectory, mockListDirectory, mockMachines, mockSessions } from '../lib/mockData';
 import { ensureNotificationPermission, notify } from '../lib/notifications';
 import { getLocalMachineId, getStoredCredentials } from '../lib/tauri';
 import { useSettingsStore } from './settingsStore';
@@ -81,6 +83,7 @@ interface HappyStoreState {
   killSession: (sessionId: string) => Promise<void>;
   spawnSession: (options: SpawnSessionOptions) => Promise<SpawnSessionResult>;
   listMachineDirectory: (machineId: string, path: string) => Promise<ListDirectoryResult>;
+  createMachineDirectory: (machineId: string, path: string, platform: string) => Promise<CreateDirectoryResult>;
   resumeSession: (sessionId: string) => Promise<SpawnSessionResult>;
   deleteSession: (sessionId: string) => Promise<void>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
@@ -351,6 +354,13 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   },
 
   async spawnSession(options) {
+    if (MOCK_ENABLED) {
+      const machine = get().machines.find((m) => m.id === options.machineId);
+      const host = (machine?.metadata as { host?: string } | null)?.host ?? options.machineId;
+      const session = buildMockSession(options.machineId, host, options.directory);
+      set((state) => ({ sessions: [...state.sessions, session] }));
+      return { type: 'success', sessionId: session.id };
+    }
     const encryptor = machineEncryptors.get(options.machineId);
     if (!encryptor) throw new Error(`Unknown machine ${options.machineId}`);
     return machineSpawnNewSession(requireSocket(), encryptor, options);
@@ -361,6 +371,13 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
     return machineListDirectory(requireSocket(), machineId, encryptor, path);
+  },
+
+  async createMachineDirectory(machineId, path, platform) {
+    if (MOCK_ENABLED) return mockCreateDirectory(path);
+    const encryptor = machineEncryptors.get(machineId);
+    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    return machineCreateDirectory(requireSocket(), machineId, encryptor, path, platform);
   },
 
   async resumeSession(sessionId) {

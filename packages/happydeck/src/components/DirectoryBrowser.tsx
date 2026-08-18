@@ -5,6 +5,8 @@ import { useHappyStore } from '../store/happyStore';
 
 interface DirectoryBrowserProps {
   machineId: string;
+  /** Needed to pick the right shell syntax for "New folder" — `mkdir` differs between Windows and everything else. */
+  platform: string;
   startPath: string;
   onSelect: (path: string) => void;
   onCancel: () => void;
@@ -16,12 +18,16 @@ interface DirectoryBrowserProps {
  * on the target machine yet). Used to pick a directory for a brand new
  * session without having to already know the remote layout.
  */
-export function DirectoryBrowser({ machineId, startPath, onSelect, onCancel }: DirectoryBrowserProps) {
+export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onCancel }: DirectoryBrowserProps) {
   const listMachineDirectory = useHappyStore((s) => s.listMachineDirectory);
+  const createMachineDirectory = useHappyStore((s) => s.createMachineDirectory);
   const [path, setPath] = useState(startPath);
   const [entries, setEntries] = useState<DirectoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [creatingBusy, setCreatingBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,13 +48,35 @@ export function DirectoryBrowser({ machineId, startPath, onSelect, onCancel }: D
     };
   }, [machineId, path, listMachineDirectory]);
 
+  const submitNewFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) {
+      setCreatingFolder(false);
+      return;
+    }
+    setCreatingBusy(true);
+    setError(null);
+    const result = await createMachineDirectory(machineId, joinPath(path, name), platform);
+    setCreatingBusy(false);
+    if (result.success) {
+      setCreatingFolder(false);
+      setNewFolderName('');
+      setPath(joinPath(path, name));
+    } else {
+      setError(result.error);
+    }
+  };
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancel();
+      if (event.key !== 'Escape') return;
+      // Escape backs out of the new-folder input first, not the whole dialog.
+      if (creatingFolder) setCreatingFolder(false);
+      else onCancel();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onCancel]);
+  }, [onCancel, creatingFolder]);
 
   return (
     <div className="confirm-backdrop" onClick={onCancel}>
@@ -65,7 +93,39 @@ export function DirectoryBrowser({ machineId, startPath, onSelect, onCancel }: D
               if (event.key === 'Enter') setPath(path);
             }}
           />
+          <button type="button" className="browser-new-folder" title="New folder" onClick={() => setCreatingFolder(true)}>
+            + new folder
+          </button>
         </div>
+
+        {creatingFolder && (
+          // A plain div, not <form> — DirectoryBrowser renders inside
+          // SpawnPanel's own <form>, and nested <form> elements are
+          // invalid HTML (React warns, and submit-event bubbling between
+          // the two gets unpredictable).
+          <div className="browser-new-folder-row">
+            <input
+              autoFocus
+              className="browser-path-input"
+              value={newFolderName}
+              placeholder="folder name"
+              disabled={creatingBusy}
+              onChange={(event) => setNewFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  submitNewFolder();
+                }
+              }}
+            />
+            <button type="button" className="browser-new-folder-create" disabled={creatingBusy || !newFolderName.trim()} onClick={submitNewFolder}>
+              create
+            </button>
+            <button type="button" onClick={() => setCreatingFolder(false)}>
+              cancel
+            </button>
+          </div>
+        )}
 
         <div className="browser-entries">
           {loading && <p className="app-message">loading…</p>}

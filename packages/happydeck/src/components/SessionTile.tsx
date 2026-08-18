@@ -1,16 +1,19 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { FiSend } from 'react-icons/fi';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { downloadTranscript } from '../lib/exportTranscript';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
 import { type TranslationKey, useT } from '../lib/i18n';
+import { openInTerminal } from '../lib/openTerminal';
 import { deriveTitle } from '../lib/sessionTitle';
 import { type AgentState, type LiveSession, useHappyStore } from '../store/happyStore';
 import { useSelectionStore } from '../store/selectionStore';
+import { useSettingsStore } from '../store/settingsStore';
 import type { Workspace } from '../store/workspaceStore';
 import { AgentSettingsPopover } from './AgentSettingsPopover';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { SlashCommandAutocomplete } from './SlashCommandAutocomplete';
 import { TileActionsMenu } from './TileActionsMenu';
 
 interface SessionTileProps {
@@ -83,12 +86,15 @@ export function SessionTile({
   const killSession = useHappyStore((s) => s.killSession);
   const isSelected = useSelectionStore((s) => s.selected.has(session.id));
   const toggleSelected = useSelectionStore((s) => s.toggle);
+  const terminalApp = useSettingsStore((s) => s.terminalApp);
 
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
+  const [slashHighlight, setSlashHighlight] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
 
@@ -151,6 +157,35 @@ export function SessionTile({
     if (!text) return;
     setDraft('');
     runAction(() => sendMessage(session.id, text));
+  };
+
+  // Slash-command autocomplete: only while the draft is still exactly
+  // "/" + a partial command name (no space typed yet) — matches whatever
+  // this specific session's own running CLI has actually registered,
+  // never a hardcoded list.
+  const slashQuery = draft.startsWith('/') && !draft.includes(' ') ? draft.slice(1) : null;
+  const slashMatches = slashDismissed || slashQuery === null ? [] : (metadata?.slashCommands ?? []).filter((c) => c.toLowerCase().startsWith(slashQuery.toLowerCase()));
+
+  const selectSlashCommand = (command: string) => {
+    setDraft(`/${command} `);
+    setSlashDismissed(true);
+  };
+
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (slashMatches.length === 0) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSlashHighlight((i) => (i + 1) % slashMatches.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSlashHighlight((i) => (i - 1 + slashMatches.length) % slashMatches.length);
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      selectSlashCommand(slashMatches[Math.min(slashHighlight, slashMatches.length - 1)]);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setSlashDismissed(true);
+    }
   };
 
   const submitTitleRename = (event: FormEvent) => {
@@ -244,7 +279,7 @@ export function SessionTile({
           onAbort={() => runAction(() => abortSession(session.id))}
           onDownload={() => runAction(() => downloadTranscript(session))}
           onKill={() => runAction(() => killSession(session.id))}
-          localPath={localPath}
+          onOpenTerminal={localPath ? () => runAction(() => openInTerminal(localPath, terminalApp)) : undefined}
         />
       </header>
 
@@ -297,6 +332,7 @@ export function SessionTile({
           onChange={(patch) => runAction(() => setAgentModes(session.id, patch))}
         />
         <form className="tile-composer" onSubmit={handleSend}>
+          <SlashCommandAutocomplete matches={slashMatches} highlightedIndex={slashHighlight} onSelect={selectSlashCommand} />
           <ComposerPlusMenu
             slashCommands={metadata?.slashCommands ?? []}
             mcpServers={metadata?.mcpServers ?? []}
@@ -307,10 +343,15 @@ export function SessionTile({
             value={draft}
             disabled={busy}
             placeholder={t('messagePlaceholder')}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setSlashDismissed(false);
+              setSlashHighlight(0);
+            }}
+            onKeyDown={handleComposerKeyDown}
           />
           <button type="submit" className="tile-composer-send" disabled={busy || !draft.trim()} title={t('send')} aria-label={t('send')}>
-            <FiSend size={17} strokeWidth={2.25} />
+            <FiSend size={68} strokeWidth={2.25} />
           </button>
         </form>
       </div>

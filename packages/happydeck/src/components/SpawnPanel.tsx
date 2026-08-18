@@ -2,12 +2,14 @@ import { type FormEvent, useState } from 'react';
 import { useT } from '../lib/i18n';
 import { useHappyStore } from '../store/happyStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useViewStore } from '../store/viewStore';
 import { DirectoryBrowser } from './DirectoryBrowser';
 
 export function SpawnPanel() {
   const t = useT();
   const machines = useHappyStore((s) => s.machines);
   const spawnSession = useHappyStore((s) => s.spawnSession);
+  const focusSession = useViewStore((s) => s.focusSession);
   const defaultPermissionMode = useSettingsStore((s) => s.defaultPermissionMode);
   const defaultModelMode = useSettingsStore((s) => s.defaultModelMode);
   const defaultEffortLevel = useSettingsStore((s) => s.defaultEffortLevel);
@@ -46,6 +48,9 @@ export function SpawnPanel() {
         setOpen(false);
         setDirectory('');
         setNeedsApproval(false);
+        // Land on the session you just created, the way starting a new
+        // chat/window in any similar app jumps you straight into it.
+        focusSession(result.sessionId);
       } else if (result.type === 'requestToApproveDirectoryCreation') {
         setNeedsApproval(true);
         setError(`"${result.directory}" doesn't exist yet — submit again to create it`);
@@ -104,7 +109,7 @@ export function SpawnPanel() {
           browse…
         </button>
       </div>
-      <button type="submit" disabled={busy || !machineId || !directory.trim()}>
+      <button type="submit" className="spawn-start" disabled={busy || !machineId || !directory.trim()}>
         {needsApproval ? 'create + start' : 'start'}
       </button>
       <button
@@ -124,6 +129,7 @@ export function SpawnPanel() {
       {browsing && machineId && (
         <DirectoryBrowser
           machineId={machineId}
+          platform={(selectedMachine?.metadata as { platform?: string } | null)?.platform ?? 'darwin'}
           startPath={directory.trim() || selectedMachineHome || '/'}
           onCancel={() => setBrowsing(false)}
           onSelect={(path) => {

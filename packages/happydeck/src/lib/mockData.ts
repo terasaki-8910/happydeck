@@ -1,5 +1,6 @@
-import type { DecryptedMachine, ListDirectoryResult } from 'happy-client';
+import type { CreateDirectoryResult, DecryptedMachine, ListDirectoryResult } from 'happy-client';
 import type { LiveSession } from '../store/happyStore';
+import { parentPath } from './paths';
 
 /**
  * Static fixture data for local UI development, so verifying a UI change
@@ -55,7 +56,7 @@ export function mockSessions(): LiveSession[] {
         permissionMode: 'default',
         modelMode: 'default',
         effortLevel: 'medium',
-        slashCommands: ['compact', 'clear', 'review'],
+        slashCommands: ['compact', 'clear', 'review', 'model', 'mcp'],
         mcpServers: [
           { name: 'happy', status: 'connected' },
           { name: 'playwright', status: 'connected' },
@@ -158,6 +159,39 @@ export function mockListDirectory(path: string): ListDirectoryResult {
     success: true,
     entries: children.map((name) => ({ name, type: 'directory', size: 0, modified: now })),
   };
+}
+
+let mockSpawnCounter = 0;
+
+/** Builds a fresh LiveSession for the mock "start" flow — lets SpawnPanel's real success path (auto-focus the new session) be exercised in mock mode instead of just throwing "Unknown machine". */
+export function buildMockSession(machineId: string, host: string, directory: string): LiveSession {
+  mockSpawnCounter += 1;
+  const id = `mock-spawned-${mockSpawnCounter}`;
+  return {
+    id,
+    seq: 1,
+    active: true,
+    activeAt: now,
+    createdAt: now,
+    updatedAt: now,
+    metadata: { path: directory, host, machineId },
+    metadataVersion: 1,
+    agentState: null,
+    agentStateVersion: 1,
+    dataKey: null,
+    thinking: false,
+    messages: [],
+  };
+}
+
+export function mockCreateDirectory(path: string): CreateDirectoryResult {
+  if (MOCK_FILESYSTEM[path]) return { success: true };
+  const parent = parentPath(path);
+  const name = path.slice(parent.length).replace(/^[/\\]+/, '');
+  if (!MOCK_FILESYSTEM[parent]) return { success: false, error: `(mock) parent directory doesn't exist: ${parent}` };
+  MOCK_FILESYSTEM[parent] = [...MOCK_FILESYSTEM[parent], name];
+  MOCK_FILESYSTEM[path] = [];
+  return { success: true };
 }
 
 export function mockMachines(): DecryptedMachine[] {
