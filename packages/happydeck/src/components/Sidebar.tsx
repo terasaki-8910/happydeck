@@ -1,6 +1,7 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { type RefObject, useEffect } from 'react';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
+import happydeckMark from '../assets/happydeck-mark.svg';
 import { type LiveSession, useHappyStore } from '../store/happyStore';
 import { SESSION_DRAG_MIME } from '../lib/dnd';
 import { useT } from '../lib/i18n';
@@ -133,7 +134,7 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
   return (
     <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <div className="sidebar-brand">
-        <span className="sidebar-brand-mark">◆</span>
+        <img className="sidebar-brand-mark" src={happydeckMark} alt="" />
         {!collapsed && <span className="sidebar-brand-name">happydeck</span>}
         <button
           type="button"
