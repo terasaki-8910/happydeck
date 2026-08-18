@@ -309,8 +309,8 @@ export function SessionTile({
             onChange={(event) => setDraft(event.target.value)}
           />
           <button type="submit" className="tile-composer-send" disabled={busy || !draft.trim()} title={t('send')} aria-label={t('send')}>
-            <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">
-              <path d="M1.05 1.55 14.8 7.65a.6.6 0 0 1 0 1.1L1.05 14.85a.6.6 0 0 1-.85-.66L2.4 8 .2 2.2a.6.6 0 0 1 .85-.65Z" />
+            <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true">
+              <path d="M3 2 L14 8 L3 14 Z" />
             </svg>
           </button>
         </form>
