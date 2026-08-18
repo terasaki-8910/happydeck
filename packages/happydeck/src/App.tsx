@@ -263,6 +263,7 @@ function App() {
     return (
       <div className="pane-leaf-inner" onMouseDownCapture={() => setActivePane(sessionId)}>
         <SessionTile
+          key={sessionId}
           session={session}
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}

@@ -131,7 +131,43 @@ export function mockSessions(): LiveSession[] {
       updatedAt: now,
       metadata: { path: '/Users/dev/project/multiMonitor', host: 'MacBook-Air.local', machineId: 'mock-machine-mac' },
       metadataVersion: 1,
-      agentState: null,
+      // A pending AskUserQuestion — exercises the AskUserQuestionCard UI in
+      // mock mode. Same shape a real Claude Code session sends (confirmed
+      // against happy-cli's permissionHandler.ts and happy-app's own
+      // AskUserQuestionView): an ordinary agentState.requests entry, not a
+      // separate protocol concept.
+      agentState: {
+        requests: {
+          'mock-ask-1': {
+            tool: 'AskUserQuestion',
+            createdAt: now,
+            arguments: {
+              questions: [
+                {
+                  question: 'Which package manager should this project use?',
+                  header: 'Package manager',
+                  multiSelect: false,
+                  options: [
+                    { label: 'pnpm', description: 'Fast, disk-space efficient — already used elsewhere in this monorepo.' },
+                    { label: 'npm', description: 'Ships with Node, no extra install.' },
+                    { label: 'yarn', description: 'Workspaces support, widely used.' },
+                  ],
+                },
+                {
+                  question: 'Which test types should the CI workflow run?',
+                  header: 'CI scope',
+                  multiSelect: true,
+                  options: [
+                    { label: 'Unit tests', description: 'Fast, run on every push.' },
+                    { label: 'Integration tests', description: 'Slower, hits a real database.' },
+                    { label: 'E2E tests', description: 'Slowest, spins up a full browser.' },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
       agentStateVersion: 1,
       dataKey: null,
       thinking: false,

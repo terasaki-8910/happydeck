@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useT } from '../lib/i18n';
+import { explainResumeError } from '../lib/resumeError';
 import type { LiveSession } from '../store/happyStore';
 import type { Workspace } from '../store/workspaceStore';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -127,12 +128,7 @@ export function SessionMenu({ session, title, pinned, workspaces, onTogglePin, o
                       const result = (await onResume()) as { type: string; errorMessage?: string } | undefined;
                       if (result && result.type !== 'success') {
                         const raw = result.errorMessage || `Resume failed: ${result.type}`;
-                        // "RPC method Not Available" specifically means that
-                        // machine's daemon never registered a resume handler
-                        // — only happens with no local Happy Agent Auth set
-                        // up (~/.happy/agent.key) on THAT machine, a one-time
-                        // setup step there, not fixable from here.
-                        throw new Error(/not available/i.test(raw) ? `Resume isn't set up on that machine yet — it needs its own local Happy Agent Auth (~/.happy/agent.key). (${raw})` : raw);
+                        throw new Error(explainResumeError(raw));
                       }
                     }).then((ok) => ok && setOpen(false))
                   }

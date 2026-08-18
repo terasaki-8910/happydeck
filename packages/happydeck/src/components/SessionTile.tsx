@@ -7,12 +7,15 @@ import { downloadTranscript } from '../lib/exportTranscript';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
 import { type TranslationKey, useT } from '../lib/i18n';
 import { openInTerminal } from '../lib/openTerminal';
+import { explainResumeError } from '../lib/resumeError';
 import { deriveTitle } from '../lib/sessionTitle';
+import { useUndoableState } from '../lib/useUndoableState';
 import { type AgentState, type LiveSession, useHappyStore } from '../store/happyStore';
 import { useSelectionStore } from '../store/selectionStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { Workspace } from '../store/workspaceStore';
 import { AgentSettingsCaption, AgentSettingsPopover } from './AgentSettingsPopover';
+import { AskUserQuestionCard, type AskUserQuestionQuestion } from './AskUserQuestionCard';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { SlashCommandAutocomplete } from './SlashCommandAutocomplete';
 import { TileActionsMenu } from './TileActionsMenu';
@@ -97,7 +100,7 @@ export function SessionTile({
   const sshTargets = useSettingsStore((s) => s.sshTargets);
   const runMachineBash = useHappyStore((s) => s.runMachineBash);
 
-  const [draft, setDraft] = useState('');
+  const { value: draft, set: setDraft, reset: resetDraft, undo: undoDraft, redo: redoDraft } = useUndoableState('');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [renamingTitle, setRenamingTitle] = useState(false);
@@ -209,7 +212,7 @@ export function SessionTile({
   const submitDraft = () => {
     const text = draft.trim();
     if (!text) return;
-    setDraft('');
+    resetDraft('');
     runAction(() => sendMessage(session.id, text));
   };
 
@@ -228,20 +231,31 @@ export function SessionTile({
     const platform = (targetMachine?.metadata as { platform?: string } | null)?.platform;
     if (!platform) throw new Error(`Unknown machine for this session (${metadata.host ?? machineId}) — can't tell how to create a directory there.`);
 
-    const attachDir = buildAttachmentDir(cwd, Date.now());
-    const mkdirResult = await createMachineDirectory(machineId, attachDir, platform);
-    if (!mkdirResult.success) throw new Error(mkdirResult.error);
+    try {
+      const attachDir = buildAttachmentDir(cwd, Date.now());
+      const mkdirResult = await createMachineDirectory(machineId, attachDir, platform);
+      if (!mkdirResult.success) throw new Error(mkdirResult.error);
 
-    const relativePaths: string[] = [];
-    for (const [index, file] of files.entries()) {
-      const fileName = file.name || `pasted-${index + 1}.${extensionForMimeType(file.type)}`;
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const result = await writeMachineBinaryFile(machineId, buildAttachmentPath(attachDir, fileName), bytes);
-      if (!result.success) throw new Error(result.error);
-      relativePaths.push(relativeAttachmentPath(cwd, attachDir, fileName));
+      const relativePaths: string[] = [];
+      for (const [index, file] of files.entries()) {
+        const fileName = file.name || `pasted-${index + 1}.${extensionForMimeType(file.type)}`;
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const result = await writeMachineBinaryFile(machineId, buildAttachmentPath(attachDir, fileName), bytes);
+        if (!result.success) throw new Error(result.error);
+        relativePaths.push(relativeAttachmentPath(cwd, attachDir, fileName));
+      }
+
+      setDraft((prev) => `${prev}${relativePaths.map((p) => `[Attached file: ${p}]`).join(' ')} `, { coalesce: false });
+    } catch (error) {
+      // Already retried transparently a couple of times if the connection
+      // to that machine merely blipped mid-call (see withDisconnectRetry) —
+      // reaching here means it stayed down longer than that, most likely on
+      // a cross-machine attachment over a slower/less stable connection.
+      if (error instanceof Error && error.message === 'socket has been disconnected') {
+        throw new Error(`Lost connection to ${metadata.host ?? machineId} partway through — already retried automatically. Check that machine's connection and try again.`);
+      }
+      throw error;
     }
-
-    setDraft((d) => `${d}${relativePaths.map((p) => `[Attached file: ${p}]`).join(' ')} `);
   };
 
   const handleAttachClick = () => fileInputRef.current?.click();
@@ -279,11 +293,28 @@ export function SessionTile({
   const slashMatches = slashDismissed || slashQuery === null ? [] : (metadata?.slashCommands ?? []).filter((c) => c.toLowerCase().startsWith(slashQuery.toLowerCase()));
 
   const selectSlashCommand = (command: string) => {
-    setDraft(`/${command} `);
+    setDraft(`/${command} `, { coalesce: false });
     setSlashDismissed(true);
   };
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Bypasses the browser's own native undo stack (see useUndoableState for
+    // why: it desyncs whenever the draft is set programmatically, e.g. a
+    // slash command or attachment reference). Cmd+Shift+Z is the Mac
+    // convention for redo; Cmd+Y is also bound since that's what was asked
+    // for and costs nothing to support alongside it.
+    const key = event.key.toLowerCase();
+    if (event.metaKey && key === 'z') {
+      event.preventDefault();
+      if (event.shiftKey) redoDraft();
+      else undoDraft();
+      return;
+    }
+    if (event.metaKey && key === 'y') {
+      event.preventDefault();
+      redoDraft();
+      return;
+    }
     if (slashMatches.length > 0) {
       if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -402,17 +433,9 @@ export function SessionTile({
               if (result.type === 'success') return;
               // resumeSession resolves (doesn't throw) on a business-logic
               // failure — was silently swallowed here before, since
-              // runAction only surfaces thrown errors. "RPC method Not
-              // Available" specifically means that machine's daemon never
-              // registered a resume handler at all, which only happens
-              // when it has no local Happy Agent Auth set up (~/.happy/agent.key)
-              // — a one-time setup step on THAT machine, not something
-              // fixable from here.
+              // runAction only surfaces thrown errors.
               const raw = result.type === 'error' ? result.errorMessage : result.type;
-              const message = /not available/i.test(raw)
-                ? `Resume isn't set up on that machine yet — it needs its own local Happy Agent Auth (~/.happy/agent.key) before it can register a resume handler. (${raw})`
-                : raw;
-              throw new Error(message);
+              throw new Error(explainResumeError(raw));
             })
           }
           onDownload={() => runAction(() => downloadTranscript(session))}
@@ -436,17 +459,30 @@ export function SessionTile({
 
       {pendingRequests.length > 0 && (
         <div className="tile-permissions">
-          {pendingRequests.map(([id, request]) => (
-            <div key={id} className="permission-request">
-              <span className="permission-tool">{request.tool}</span>
-              <button type="button" disabled={busy} onClick={() => runAction(() => allowRequest(session.id, id))}>
-                allow
-              </button>
-              <button type="button" disabled={busy} onClick={() => runAction(() => denyRequest(session.id, id))}>
-                deny
-              </button>
-            </div>
-          ))}
+          {pendingRequests.map(([id, request]) => {
+            const questionInput = request.tool === 'AskUserQuestion' ? (request.arguments as { questions?: AskUserQuestionQuestion[] } | undefined) : undefined;
+            if (questionInput?.questions && questionInput.questions.length > 0) {
+              return (
+                <AskUserQuestionCard
+                  key={id}
+                  questions={questionInput.questions}
+                  busy={busy}
+                  onSubmit={(answers) => runAction(() => allowRequest(session.id, id, { answers }))}
+                />
+              );
+            }
+            return (
+              <div key={id} className="permission-request">
+                <span className="permission-tool">{request.tool}</span>
+                <button type="button" disabled={busy} onClick={() => runAction(() => allowRequest(session.id, id))}>
+                  allow
+                </button>
+                <button type="button" disabled={busy} onClick={() => runAction(() => denyRequest(session.id, id))}>
+                  deny
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -486,7 +522,7 @@ export function SessionTile({
           <ComposerPlusMenu
             slashCommands={metadata?.slashCommands ?? []}
             mcpServers={metadata?.mcpServers ?? []}
-            onInsertSlashCommand={(command) => setDraft((d) => `${d}/${command} `)}
+            onInsertSlashCommand={(command) => setDraft((d) => `${d}/${command} `, { coalesce: false })}
             onAttachFile={handleAttachClick}
           />
           <textarea

@@ -55,3 +55,45 @@ export function machineRPC<TResult, TParams>(
 ): Promise<TResult> {
   return callRPC(socket, machineId, method, params, encryptor);
 }
+
+const DISCONNECT_RETRY_LIMIT = 2;
+const RECONNECT_WAIT_MS = 8000;
+
+function waitForReconnect(socket: Socket, timeoutMs: number): Promise<boolean> {
+  if (socket.connected) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      socket.off('connect', onConnect);
+      resolve(false);
+    }, timeoutMs);
+    const onConnect = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    socket.once('connect', onConnect);
+  });
+}
+
+/**
+ * Retries an RPC call if it fails because the socket disconnected while the
+ * call was in flight. socket.io-client rejects every pending emitWithAck
+ * with the exact message "socket has been disconnected" the instant the
+ * transport drops (see Socket.prototype._clearAcks in socket.io-client) —
+ * expected for a brief reconnect blip, especially over a cross-machine
+ * connection (Tailscale), not a real failure. Only wrap calls that are
+ * genuinely safe to run twice (a read, or a write with idempotent content
+ * like writeFile/mkdir -p) — never something with a side effect that isn't
+ * safe to repeat, like spawning a process.
+ */
+export async function withDisconnectRetry<T>(socket: Socket, call: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await call();
+    } catch (error) {
+      const isDisconnect = error instanceof Error && error.message === 'socket has been disconnected';
+      if (!isDisconnect || attempt >= DISCONNECT_RETRY_LIMIT || !(await waitForReconnect(socket, RECONNECT_WAIT_MS))) {
+        throw error;
+      }
+    }
+  }
+}

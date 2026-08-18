@@ -1126,6 +1126,137 @@ body {
   cursor: pointer;
 }
 
+.ask-question-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ask-question {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ask-question-header {
+  align-self: flex-start;
+  background: var(--bg);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.ask-question-text {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.ask-question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ask-question-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ask-question-option:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ask-question-option-selected {
+  border-color: var(--accent);
+  background: rgba(240, 166, 60, 0.12);
+}
+
+.ask-question-marker {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  border: 1.5px solid var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ask-question-marker-radio {
+  border-radius: 50%;
+}
+
+.ask-question-marker-checkbox {
+  border-radius: 3px;
+}
+
+.ask-question-option-selected .ask-question-marker {
+  border-color: var(--accent);
+}
+
+.ask-question-marker-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--accent);
+}
+
+.ask-question-marker-radio .ask-question-marker-dot {
+  border-radius: 50%;
+}
+
+.ask-question-marker-checkbox .ask-question-marker-dot {
+  border-radius: 1px;
+}
+
+.ask-question-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ask-question-option-label {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.ask-question-option-description {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.ask-question-submit {
+  align-self: flex-end;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: #1a1a1a;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.ask-question-submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .tile-action-error {
   margin: 0;
   padding: 6px 12px;

@@ -31,6 +31,7 @@ import {
   machineSpawnNewSession,
   machineWriteBinaryFile,
   machineWriteFile,
+  withDisconnectRetry,
   mintToken,
   sendSessionMessage,
   sessionAbort,
@@ -86,7 +87,7 @@ interface HappyStoreState {
   loadOlderMessages: (sessionId: string) => Promise<void>;
   sendMessage: (sessionId: string, text: string, meta?: SendMessageMeta) => Promise<void>;
   setAgentModes: (sessionId: string, patch: SessionAgentModesPatch) => Promise<void>;
-  allowRequest: (sessionId: string, requestId: string) => Promise<void>;
+  allowRequest: (sessionId: string, requestId: string, updatedInput?: Record<string, unknown>) => Promise<void>;
   denyRequest: (sessionId: string, requestId: string) => Promise<void>;
   abortSession: (sessionId: string) => Promise<void>;
   killSession: (sessionId: string) => Promise<void>;
@@ -400,8 +401,18 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     }));
   },
 
-  async allowRequest(sessionId, requestId) {
-    await sessionAllow(requireSocket(), sessionId, requireSessionEncryptor(sessionId), requestId);
+  async allowRequest(sessionId, requestId, updatedInput) {
+    if (MOCK_ENABLED) {
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === sessionId && s.agentState && typeof s.agentState === 'object' && 'requests' in s.agentState
+            ? { ...s, agentState: { ...s.agentState, requests: Object.fromEntries(Object.entries((s.agentState as AgentState).requests ?? {}).filter(([id]) => id !== requestId)) } }
+            : s,
+        ),
+      }));
+      return;
+    }
+    await sessionAllow(requireSocket(), sessionId, requireSessionEncryptor(sessionId), requestId, { updatedInput });
   },
 
   async denyRequest(sessionId, requestId) {
@@ -433,14 +444,16 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     if (MOCK_ENABLED) return mockListDirectory(path);
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
-    return machineListDirectory(requireSocket(), machineId, encryptor, path);
+    const socket = requireSocket();
+    return withDisconnectRetry(socket, () => machineListDirectory(socket, machineId, encryptor, path));
   },
 
   async createMachineDirectory(machineId, path, platform) {
     if (MOCK_ENABLED) return mockCreateDirectory(path);
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
-    return machineCreateDirectory(requireSocket(), machineId, encryptor, path, platform);
+    const socket = requireSocket();
+    return withDisconnectRetry(socket, () => machineCreateDirectory(socket, machineId, encryptor, path, platform));
   },
 
   async runMachineBash(machineId, command) {
@@ -487,19 +500,22 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   async readMachineFile(machineId, path) {
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
-    return machineReadFile(requireSocket(), machineId, encryptor, path);
+    const socket = requireSocket();
+    return withDisconnectRetry(socket, () => machineReadFile(socket, machineId, encryptor, path));
   },
 
   async writeMachineFile(machineId, path, content) {
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
-    return machineWriteFile(requireSocket(), machineId, encryptor, path, content);
+    const socket = requireSocket();
+    return withDisconnectRetry(socket, () => machineWriteFile(socket, machineId, encryptor, path, content));
   },
 
   async writeMachineBinaryFile(machineId, path, bytes) {
     if (MOCK_ENABLED) return { success: true };
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
-    return machineWriteBinaryFile(requireSocket(), machineId, encryptor, path, bytes);
+    const socket = requireSocket();
+    return withDisconnectRetry(socket, () => machineWriteBinaryFile(socket, machineId, encryptor, path, bytes));
   },
 }));
