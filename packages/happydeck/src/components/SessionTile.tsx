@@ -1,7 +1,8 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ClipboardEvent, type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LuSendHorizontal } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { buildAttachmentDir, buildAttachmentPath, extensionForMimeType, relativeAttachmentPath } from '../lib/attachments';
 import { downloadTranscript } from '../lib/exportTranscript';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
 import { type TranslationKey, useT } from '../lib/i18n';
@@ -87,6 +88,8 @@ export function SessionTile({
   const resumeSession = useHappyStore((s) => s.resumeSession);
   const loadOlderMessages = useHappyStore((s) => s.loadOlderMessages);
   const killSession = useHappyStore((s) => s.killSession);
+  const createMachineDirectory = useHappyStore((s) => s.createMachineDirectory);
+  const writeMachineBinaryFile = useHappyStore((s) => s.writeMachineBinaryFile);
   const isSelected = useSelectionStore((s) => s.selected.has(session.id));
   const toggleSelected = useSelectionStore((s) => s.toggle);
   const terminalApp = useSettingsStore((s) => s.terminalApp);
@@ -106,6 +109,7 @@ export function SessionTile({
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const pendingOlderLoadScrollHeightRef = useRef<number | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const status = statusOf(session);
   const metadata = session.metadata as
@@ -207,6 +211,59 @@ export function SessionTile({
     if (!text) return;
     setDraft('');
     runAction(() => sendMessage(session.id, text));
+  };
+
+  // Writes straight to the session's own machine via the machine-scoped
+  // file RPC (works cross-machine over Happy's relay already — no SSH
+  // needed) instead of Happy's own E2E-encrypted blob-upload protocol,
+  // whose reference implementation isn't available in this repo. One
+  // fresh `.claude/happy-<timestamp>/` directory per attach action, so a
+  // file-picker batch and a later paste never collide.
+  const attachFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    if (!metadata?.path || !metadata.machineId) throw new Error("This session's working directory isn't known yet — try again once it's loaded.");
+    const cwd = metadata.path;
+    const machineId = metadata.machineId;
+    const targetMachine = machines.find((m) => m.id === machineId);
+    const platform = (targetMachine?.metadata as { platform?: string } | null)?.platform;
+    if (!platform) throw new Error(`Unknown machine for this session (${metadata.host ?? machineId}) — can't tell how to create a directory there.`);
+
+    const attachDir = buildAttachmentDir(cwd, Date.now());
+    const mkdirResult = await createMachineDirectory(machineId, attachDir, platform);
+    if (!mkdirResult.success) throw new Error(mkdirResult.error);
+
+    const relativePaths: string[] = [];
+    for (const [index, file] of files.entries()) {
+      const fileName = file.name || `pasted-${index + 1}.${extensionForMimeType(file.type)}`;
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const result = await writeMachineBinaryFile(machineId, buildAttachmentPath(attachDir, fileName), bytes);
+      if (!result.success) throw new Error(result.error);
+      relativePaths.push(relativeAttachmentPath(cwd, attachDir, fileName));
+    }
+
+    setDraft((d) => `${d}${relativePaths.map((p) => `[Attached file: ${p}]`).join(' ')} `);
+  };
+
+  const handleAttachClick = () => fileInputRef.current?.click();
+
+  const handleFileInputChange = (event: FormEvent<HTMLInputElement>) => {
+    const files = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = '';
+    if (files.length > 0) runAction(() => attachFiles(files));
+  };
+
+  // Especially valuable for a session on a remote machine — there's no
+  // other way to get a screenshot onto that machine's filesystem short of
+  // manually copying it over yourself.
+  const handleComposerPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(event.clipboardData?.items ?? []);
+    const imageFiles = items
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    if (imageFiles.length === 0) return;
+    event.preventDefault();
+    runAction(() => attachFiles(imageFiles));
   };
 
   const handleSend = (event: FormEvent) => {
@@ -425,10 +482,12 @@ export function SessionTile({
       <div className="tile-bottom-bar">
         <form className="tile-composer" onSubmit={handleSend}>
           <SlashCommandAutocomplete matches={slashMatches} highlightedIndex={slashHighlight} onSelect={selectSlashCommand} />
+          <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileInputChange} />
           <ComposerPlusMenu
             slashCommands={metadata?.slashCommands ?? []}
             mcpServers={metadata?.mcpServers ?? []}
             onInsertSlashCommand={(command) => setDraft((d) => `${d}/${command} `)}
+            onAttachFile={handleAttachClick}
           />
           <textarea
             ref={composerInputRef}
@@ -443,6 +502,7 @@ export function SessionTile({
               setSlashHighlight(0);
             }}
             onKeyDown={handleComposerKeyDown}
+            onPaste={handleComposerPaste}
           />
           <AgentSettingsPopover
             permissionMode={metadata?.permissionMode ?? 'default'}

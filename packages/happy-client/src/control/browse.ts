@@ -67,6 +67,33 @@ export async function machineWriteFile(
   return { success: true };
 }
 
+/**
+ * Writes raw bytes (images, arbitrary binary attachments) via the same
+ * `writeFile` RPC as machineWriteFile — but base64-encodes the bytes
+ * directly instead of round-tripping them through TextEncoder, which
+ * assumes its input is a UTF-8 string and corrupts arbitrary byte
+ * sequences (bytes outside valid UTF-8 don't round-trip through decode-
+ * then-re-encode).
+ */
+export async function machineWriteBinaryFile(
+  socket: Socket,
+  machineId: string,
+  encryptor: Encryptor & Decryptor,
+  path: string,
+  bytes: Uint8Array,
+): Promise<WriteFileResult> {
+  const encoded = encodeBase64(bytes, 'base64');
+  const result = await machineRPC<RawWriteFileResult, { path: string; content: string }>(
+    socket,
+    machineId,
+    'writeFile',
+    { path, content: encoded },
+    encryptor,
+  );
+  if (!result.success) return result;
+  return { success: true };
+}
+
 export type BashResult = { success: true; stdout: string; stderr: string } | { success: false; error: string };
 
 /**

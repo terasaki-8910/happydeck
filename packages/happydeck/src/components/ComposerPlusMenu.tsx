@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '../lib/i18n';
 
 interface McpServerStatus {
   name: string;
@@ -9,18 +10,20 @@ interface ComposerPlusMenuProps {
   slashCommands: string[];
   mcpServers: McpServerStatus[];
   onInsertSlashCommand: (command: string) => void;
+  onAttachFile: () => void;
 }
 
 /**
- * "+" menu next to the composer. File attachment isn't wired up yet — the
- * upload protocol (2-step: request a blob upload slot, then PUT the
- * encrypted bytes) isn't fully recoverable from the reference client
- * source in this repo (packages/happy-app/sources/sync/apiAttachments.ts
- * is referenced but missing), so it needs live protocol probing before
- * it can be built safely. Slash commands and MCP status are both already
- * in session metadata happydeck fetches, so those work today.
+ * "+" menu next to the composer. File attachment writes straight to
+ * `.claude/happy-<timestamp>/` on the session's own machine via the
+ * machine-scoped writeFile RPC (see lib/attachments.ts) rather than
+ * Happy's own end-to-end-encrypted blob-upload protocol — that protocol's
+ * reference implementation (packages/happy-app/sources/sync/
+ * apiAttachments.ts) isn't present in this repo, while the machine RPC
+ * path was already fully available and works cross-machine without SSH.
  */
-export function ComposerPlusMenu({ slashCommands, mcpServers, onInsertSlashCommand }: ComposerPlusMenuProps) {
+export function ComposerPlusMenu({ slashCommands, mcpServers, onInsertSlashCommand, onAttachFile }: ComposerPlusMenuProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -48,6 +51,19 @@ export function ComposerPlusMenu({ slashCommands, mcpServers, onInsertSlashComma
 
       {open && (
         <div className="session-menu-popover composer-plus-popover" onClick={(event) => event.stopPropagation()}>
+          <div className="agent-settings-section">
+            <button
+              type="button"
+              className="agent-settings-row"
+              onClick={() => {
+                onAttachFile();
+                setOpen(false);
+              }}
+            >
+              {t('attachFile')}
+            </button>
+          </div>
+          <div className="session-menu-divider" />
           <div className="agent-settings-section">
             <span className="session-menu-label">Slash commands</span>
             {slashCommands.length === 0 && <p className="composer-plus-empty">none available for this session</p>}

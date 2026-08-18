@@ -29,6 +29,7 @@ import {
   machineResumeSession,
   machineRunBash,
   machineSpawnNewSession,
+  machineWriteBinaryFile,
   machineWriteFile,
   mintToken,
   sendSessionMessage,
@@ -98,6 +99,7 @@ interface HappyStoreState {
   renameSession: (sessionId: string, title: string) => Promise<void>;
   readMachineFile: (machineId: string, path: string) => Promise<ReadFileResult>;
   writeMachineFile: (machineId: string, path: string, content: string) => Promise<WriteFileResult>;
+  writeMachineBinaryFile: (machineId: string, path: string, bytes: Uint8Array) => Promise<WriteFileResult>;
 }
 
 function getAppState(): 'active' | 'background' {
@@ -492,5 +494,12 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
     return machineWriteFile(requireSocket(), machineId, encryptor, path, content);
+  },
+
+  async writeMachineBinaryFile(machineId, path, bytes) {
+    if (MOCK_ENABLED) return { success: true };
+    const encryptor = machineEncryptors.get(machineId);
+    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    return machineWriteBinaryFile(requireSocket(), machineId, encryptor, path, bytes);
   },
 }));

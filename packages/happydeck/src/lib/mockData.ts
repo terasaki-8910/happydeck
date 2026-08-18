@@ -189,13 +189,28 @@ export function buildMockSession(machineId: string, host: string, directory: str
   };
 }
 
+// Mirrors the real machine RPC, which always shells out to `mkdir -p` (see
+// happy-client's machineCreateDirectory) — creates any missing ancestors
+// too, not just the immediate parent. A strict superset of plain mkdir: when
+// the parent already exists (the DirectoryBrowser's "new folder" case) this
+// behaves identically to before.
 export function mockCreateDirectory(path: string): CreateDirectoryResult {
   if (MOCK_FILESYSTEM[path]) return { success: true };
-  const parent = parentPath(path);
-  const name = path.slice(parent.length).replace(/^[/\\]+/, '');
-  if (!MOCK_FILESYSTEM[parent]) return { success: false, error: `(mock) parent directory doesn't exist: ${parent}` };
-  MOCK_FILESYSTEM[parent] = [...MOCK_FILESYSTEM[parent], name];
-  MOCK_FILESYSTEM[path] = [];
+  const missingAncestors: string[] = [];
+  let current = path;
+  while (!MOCK_FILESYSTEM[current]) {
+    missingAncestors.push(current);
+    const parent = parentPath(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  for (let i = missingAncestors.length - 1; i >= 0; i--) {
+    const dir = missingAncestors[i];
+    const parent = parentPath(dir);
+    const name = dir.slice(parent.length).replace(/^[/\\]+/, '');
+    MOCK_FILESYSTEM[parent] = [...(MOCK_FILESYSTEM[parent] ?? []), name];
+    MOCK_FILESYSTEM[dir] = [];
+  }
   return { success: true };
 }
 
