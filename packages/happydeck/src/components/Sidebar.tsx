@@ -2,7 +2,8 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { type RefObject, useEffect } from 'react';
 import { LuPanelLeft, LuPin, LuSearch } from 'react-icons/lu';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
-import happydeckMark from '../assets/happydeck-mark.svg';
+import happydeckMarkDark from '../assets/happydeck-mark.svg';
+import happydeckMarkLight from '../assets/happydeck-mark-light.svg';
 import { type LiveSession, useHappyStore } from '../store/happyStore';
 import { SESSION_DRAG_MIME } from '../lib/dnd';
 import { messageRole, renderablePart } from '../lib/formatMessage';
@@ -10,6 +11,7 @@ import { useT } from '../lib/i18n';
 import { basename } from '../lib/paths';
 import { byRecency } from '../lib/sessionOrder';
 import { deriveTitle } from '../lib/sessionTitle';
+import { useEffectiveTheme } from '../lib/useEffectiveTheme';
 import { usePinStore } from '../store/pinStore';
 import { useViewStore } from '../store/viewStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
@@ -157,6 +159,8 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
   const localMachineId = useHappyStore((s) => s.localMachineId);
   const machines = useHappyStore((s) => s.machines);
   const localHost = (machines.find((m) => m.id === localMachineId)?.metadata as { host?: string } | null)?.host;
+  const effectiveTheme = useEffectiveTheme();
+  const brandMark = effectiveTheme === 'light' ? happydeckMarkLight : happydeckMarkDark;
 
   // Auto-collapse only fires at the moment the breakpoint is crossed, so it
   // never fights a manual toggle (or a manual drag-resize) made while
@@ -183,7 +187,7 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
   return (
     <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <div className="sidebar-brand">
-        <img className="sidebar-brand-mark" src={happydeckMark} alt="" />
+        <img className="sidebar-brand-mark" src={brandMark} alt="" />
         {!collapsed && <span className="sidebar-brand-name">happydeck</span>}
         <button
           type="button"
