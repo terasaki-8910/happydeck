@@ -1828,6 +1828,30 @@ body {
   border-color: var(--text-faint);
 }
 
+.tile-composer-summarize {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.tile-composer-summarize:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+}
+
+.tile-composer-summarize:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
 .composer-plus-popover {
   bottom: 100%;
   top: auto;
