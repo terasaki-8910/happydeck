@@ -1,5 +1,18 @@
 import { create } from 'zustand';
-import { appendAsRootSibling, type DropZone, insertAtZone, leaf, type PaneNode, paneTreeHas, paneTreeSessionIds, removeFromPaneTree, replaceLeaf } from '../lib/paneTree';
+import {
+  appendAsRootSibling,
+  type DropZone,
+  insertAtGap,
+  insertAtOuterEdge,
+  insertAtZone,
+  leaf,
+  type OuterEdge,
+  type PaneNode,
+  paneTreeHas,
+  paneTreeSessionIds,
+  removeFromPaneTree,
+  replaceLeaf,
+} from '../lib/paneTree';
 
 // 'panes': the main content area shows one or more sessions laid out as a
 // binary split tree (see lib/paneTree.ts). Clicking a sidebar session
@@ -23,8 +36,12 @@ interface ViewState {
    * that collapsing was the exact behavior flagged as "disappointing".
    */
   focusSession: (sessionId: string) => void;
-  /** Drag a sidebar session onto an existing pane's edge/corner: split that pane, placing the new session on the named side. 'center' replaces it in place instead of splitting. */
+  /** Drag a sidebar session onto an existing pane's edge/corner: split that pane, placing the new session on the named side. 'center' replaces it in place instead of splitting. Irregular/unequal — the deliberately-kept-as-is nested-split gesture. */
   addPaneAtZone: (targetSessionId: string, zone: DropZone, sessionId: string) => void;
+  /** Drag to the outer edge of the whole pane area: adds a new pane there and evenly rebalances every top-level sibling on that axis. */
+  addPaneAtOuterEdge: (edge: OuterEdge, sessionId: string) => void;
+  /** Drop directly on a divider: inserts a new pane at that gap and evenly rebalances every child of the split that divider belongs to. */
+  addPaneAtGap: (splitPath: string, gapIndex: number, sessionId: string) => void;
   /** Drag a sidebar session onto empty space (only reachable when no pane is open yet). */
   addPaneToRoot: (sessionId: string) => void;
   /** Mark a pane as the one sidebar clicks will replace — called when a pane is clicked/focused directly. */
@@ -67,6 +84,21 @@ export const useViewStore = create<ViewState>((set, get) => ({
       const tree = paneTreeHas(state.mode.tree, sessionId) ? removeFromPaneTree(state.mode.tree, sessionId) : state.mode.tree;
       if (!tree) return state;
       return { mode: { type: 'panes', tree: insertAtZone(tree, targetSessionId, zone, sessionId) }, activePaneSessionId: sessionId };
+    }),
+
+  addPaneAtOuterEdge: (edge, sessionId) =>
+    set((state) => {
+      if (state.mode.type !== 'panes') return state;
+      const tree = paneTreeHas(state.mode.tree, sessionId) ? removeFromPaneTree(state.mode.tree, sessionId) : state.mode.tree;
+      return { mode: { type: 'panes', tree: insertAtOuterEdge(tree, edge, sessionId) }, activePaneSessionId: sessionId };
+    }),
+
+  addPaneAtGap: (splitPath, gapIndex, sessionId) =>
+    set((state) => {
+      if (state.mode.type !== 'panes') return state;
+      const tree = paneTreeHas(state.mode.tree, sessionId) ? removeFromPaneTree(state.mode.tree, sessionId) : state.mode.tree;
+      if (!tree) return state;
+      return { mode: { type: 'panes', tree: insertAtGap(tree, splitPath, gapIndex, sessionId) }, activePaneSessionId: sessionId };
     }),
 
   addPaneToRoot: (sessionId) =>
