@@ -204,6 +204,25 @@ export function SessionTile({
     el.style.height = `${el.scrollHeight}px`;
   }, [draft]);
 
+  // A pane created via drag-split can run the effect above while
+  // react-resizable-panels is still mid-transition sizing the new split —
+  // scrollHeight gets measured against a transient width, baking in a
+  // wrong height that then never self-corrects for an empty composer,
+  // since draft never changes again to re-trigger the effect. Confirmed
+  // live: an empty textarea in a freshly-split pane stuck at max-height
+  // instead of collapsing to its single-line minimum. Re-fit whenever the
+  // element's own box actually resizes, independent of draft.
+  useEffect(() => {
+    const el = composerInputRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const runAction = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setActionError(null);

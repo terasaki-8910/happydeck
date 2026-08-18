@@ -25,6 +25,7 @@ function labelOf(options: ModeOption[], key: string): string {
  */
 export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, busy, onChange }: AgentSettingsPopoverProps) {
   const [open, setOpen] = useState(false);
+  const [customModel, setCustomModel] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,6 +43,14 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
       window.removeEventListener('keydown', onEscape);
     };
   }, [open]);
+
+  const submitCustomModel = () => {
+    const trimmed = customModel.trim();
+    if (!trimmed) return;
+    onChange({ modelMode: trimmed });
+    setCustomModel('');
+    setOpen(false);
+  };
 
   const section = (title: string, options: ModeOption[], current: string, key: 'permissionMode' | 'modelMode' | 'effortLevel') => (
     <div className="agent-settings-section">
@@ -89,7 +98,55 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
 
       {open && (
         <div className="session-menu-popover agent-settings-popover" onClick={(event) => event.stopPropagation()}>
-          {section('Model', CLAUDE_MODEL_MODES, modelMode, 'modelMode')}
+          <div className="agent-settings-section">
+            <span className="session-menu-label">Model</span>
+            {CLAUDE_MODEL_MODES.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className="agent-settings-row"
+                disabled={busy}
+                onClick={() => {
+                  onChange({ modelMode: option.key });
+                  setOpen(false);
+                }}
+              >
+                <span>{option.name}</span>
+                {option.key === modelMode && <span className="agent-settings-check">✓</span>}
+              </button>
+            ))}
+            {!CLAUDE_MODEL_MODES.some((option) => option.key === modelMode) && (
+              // The hardcoded list above (see agentOptions.ts — the Claude
+              // Agent SDK doesn't report an available-models list for classic
+              // sessions the way it does for other agent flavors, so there's
+              // no dynamic source to read instead) will lag behind whatever
+              // Anthropic actually ships. Surfacing the currently-set value
+              // even when unrecognized, rather than silently hiding it as if
+              // "no model" were selected.
+              <button type="button" className="agent-settings-row" disabled>
+                <span>{modelMode}</span>
+                <span className="agent-settings-check">✓</span>
+              </button>
+            )}
+            <div className="agent-settings-custom-model">
+              <input
+                type="text"
+                value={customModel}
+                disabled={busy}
+                placeholder="custom model id…"
+                onChange={(event) => setCustomModel(event.target.value)}
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return;
+                  event.preventDefault();
+                  submitCustomModel();
+                }}
+              />
+              <button type="button" disabled={busy || !customModel.trim()} onClick={submitCustomModel}>
+                use
+              </button>
+            </div>
+          </div>
           <div className="session-menu-divider" />
           {section('Effort', CLAUDE_EFFORT_LEVELS, effortLevel, 'effortLevel')}
           <div className="session-menu-divider" />

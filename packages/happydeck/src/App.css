@@ -1094,6 +1094,43 @@ body {
   font-size: 11px;
 }
 
+.agent-settings-custom-model {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px 2px;
+}
+
+.agent-settings-custom-model input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.agent-settings-custom-model input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.agent-settings-custom-model button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.agent-settings-custom-model button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .tile-permissions {
   display: flex;
   flex-direction: column;

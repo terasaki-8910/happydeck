@@ -423,6 +423,12 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   async setAgentModes(sessionId, patch) {
     const session = get().sessions.find((s) => s.id === sessionId);
     if (!session) throw new Error(`Unknown session ${sessionId}`);
+    if (MOCK_ENABLED) {
+      set((state) => ({
+        sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, metadata: { ...(s.metadata as Record<string, unknown>), ...patch } } : s)),
+      }));
+      return;
+    }
     const result = await updateSessionAgentModes(
       requireSocket(),
       sessionId,
