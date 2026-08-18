@@ -10,6 +10,22 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * Thrown when a request never got a response within REQUEST_TIMEOUT_MS.
+ * `fetch()` has no default timeout of its own — a dropped connection, a
+ * server that's up but not answering, or a VPN/Tailscale hiccup all hang
+ * the returned promise forever otherwise, which is exactly what left the
+ * app stuck on "connecting…" indefinitely with no way to recover short of
+ * force-quitting (confirmed: this is what happened).
+ */
+export class HttpTimeoutError extends Error {
+  constructor(path: string) {
+    super(`Request to ${path} timed out`);
+  }
+}
+
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function safeText(response: Response): Promise<string> {
   try {
     return await response.text();
@@ -34,7 +50,14 @@ export class HttpClient {
       'X-Happy-Client': getHappyClientId(),
       ...(init.headers as Record<string, string> | undefined),
     };
-    return fetch(url, { ...init, headers });
+    try {
+      return await fetch(url, { ...init, headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'TimeoutError') {
+        throw new HttpTimeoutError(path);
+      }
+      throw error;
+    }
   }
 
   async get<T>(path: string): Promise<T> {

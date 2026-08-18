@@ -13,6 +13,8 @@ import {
   type TerminalAppChoice,
   TERMINAL_WINDOW_MODE_LABELS,
   type TerminalWindowMode,
+  THEME_LABELS,
+  type Theme,
   useSettingsStore,
 } from '../store/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
@@ -75,6 +77,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
 function GeneralSection() {
   const t = useT();
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
   const font = useSettingsStore((s) => s.font);
   const setFont = useSettingsStore((s) => s.setFont);
   const language = useSettingsStore((s) => s.language);
@@ -87,6 +91,18 @@ function GeneralSection() {
   return (
     <div className="settings-section">
       <h2>{t('settingsGeneral')}</h2>
+
+      <label className="settings-field">
+        <span>{t('theme')}</span>
+        <select value={theme} onChange={(event) => setTheme(event.target.value as Theme)}>
+          {(Object.keys(THEME_LABELS) as Theme[]).map((key) => (
+            <option key={key} value={key}>
+              {THEME_LABELS[key]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="settings-hint">{t('themeHint')}</p>
 
       <label className="settings-field">
         <span>{t('language')}</span>

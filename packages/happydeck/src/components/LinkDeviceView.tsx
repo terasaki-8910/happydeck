@@ -23,7 +23,12 @@ export function LinkDeviceView() {
       setState({ phase: 'generating' });
       const attempt = await startAccountLink();
       if (cancelled) return;
-      const qrDataUrl = await QRCode.toDataURL(attempt.qrUrl, { margin: 1, width: 240, color: { dark: '#e7e7ea', light: '#00000000' } });
+      // Transparent background so the card's own --bg-tile shows through
+      // (see .link-device-qr) — the dot color has to match --text at
+      // generation time since QRCode.toDataURL rasterizes a PNG once, not a
+      // live-updating SVG that could reference the CSS variable directly.
+      const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#e7e7ea';
+      const qrDataUrl = await QRCode.toDataURL(attempt.qrUrl, { margin: 1, width: 240, color: { dark: textColor, light: '#00000000' } });
       if (cancelled) return;
       setState({ phase: 'waiting', qrDataUrl });
 

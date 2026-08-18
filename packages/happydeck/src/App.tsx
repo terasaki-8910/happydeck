@@ -80,6 +80,7 @@ function App() {
   const rectsSnapshotRef = useRef<{ leaves: Map<string, DOMRect>; gaps: Map<string, DOMRect> } | null>(null);
   const sidebarPanelRef = useRef<PanelImperativeHandle>(null);
   const font = useSettingsStore((s) => s.font);
+  const theme = useSettingsStore((s) => s.theme);
 
   useEffect(() => {
     bootstrap();
@@ -88,6 +89,14 @@ function App() {
   useEffect(() => {
     document.documentElement.style.setProperty('--font-ui', FONT_STACKS[font]);
   }, [font]);
+
+  // 'system' intentionally clears the attribute rather than setting it —
+  // App.css's light/dark blocks fall through to the OS's own
+  // prefers-color-scheme when no explicit override is present.
+  useEffect(() => {
+    if (theme === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -286,7 +295,14 @@ function App() {
 
             {status === 'linking-required' && <LinkDeviceView />}
 
-            {status === 'error' && <p className="app-message app-message-error">{error}</p>}
+            {status === 'error' && (
+              <div className="app-message app-message-error">
+                <p>{error}</p>
+                <button type="button" className="app-retry" onClick={() => bootstrap()}>
+                  Retry
+                </button>
+              </div>
+            )}
 
             {status === 'ready' && sessions.length === 0 && <p className="app-message">No sessions found.</p>}
 

@@ -18,6 +18,14 @@ export const FONT_LABELS: Record<FontChoice, string> = {
   compact: 'Compact',
 };
 
+export type Theme = 'system' | 'light' | 'dark';
+
+export const THEME_LABELS: Record<Theme, string> = {
+  system: 'System',
+  light: 'Light',
+  dark: 'Dark',
+};
+
 export interface NotificationPrefs {
   done: boolean;
   permission: boolean;
@@ -53,6 +61,7 @@ export const TERMINAL_WINDOW_MODE_LABELS: Record<TerminalWindowMode, string> = {
 };
 
 interface SettingsState {
+  theme: Theme;
   font: FontChoice;
   language: Language;
   terminalApp: TerminalAppChoice;
@@ -67,6 +76,7 @@ interface SettingsState {
   // the user already has to their other machines over Tailscale. Keyed by
   // Happy machineId, not host, so it survives a machine's host/IP changing.
   sshTargets: Record<string, string>;
+  setTheme: (theme: Theme) => void;
   setFont: (font: FontChoice) => void;
   setLanguage: (language: Language) => void;
   setTerminalApp: (terminalApp: TerminalAppChoice) => void;
@@ -79,6 +89,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
+      theme: 'system',
       font: 'system',
       language: 'en',
       terminalApp: 'system',
@@ -88,6 +99,7 @@ export const useSettingsStore = create<SettingsState>()(
       defaultEffortLevel: 'medium',
       notify: { done: true, permission: true, question: true },
       sshTargets: {},
+      setTheme: (theme) => set({ theme }),
       setFont: (font) => set({ font }),
       setLanguage: (language) => set({ language }),
       setTerminalApp: (terminalApp) => set({ terminalApp }),
