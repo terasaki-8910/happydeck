@@ -1,9 +1,11 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { type RefObject, useEffect } from 'react';
+import { type RefObject, useEffect, useState } from 'react';
+import { LuPanelLeft, LuSparkles } from 'react-icons/lu';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import happydeckMark from '../assets/happydeck-mark.svg';
 import { type LiveSession, useHappyStore } from '../store/happyStore';
 import { SESSION_DRAG_MIME } from '../lib/dnd';
+import { messageRole, renderablePart } from '../lib/formatMessage';
 import { useT } from '../lib/i18n';
 import { byRecency } from '../lib/sessionOrder';
 import { deriveTitle } from '../lib/sessionTitle';
@@ -32,6 +34,35 @@ function statusClassOf(session: LiveSession): string {
   return 'status-online';
 }
 
+/**
+ * The sidebar's second line: the agent's own most recent reply, so
+ * "what is this session actually doing right now" is visible at a glance
+ * without opening it. The sparkle button (below) just gives you a way to
+ * ask for a fresh one on demand — this always shows whatever's latest,
+ * asked-for or not. Falls back to the working directory when no agent text
+ * exists yet (a brand-new session).
+ */
+// Combined "host: title" is one line now (was host above, title below), so
+// a long default mDNS hostname (MacBook-Air.local) was eating most of the
+// row's width before the title even started — ".local" carries no
+// information worth that space.
+function shortHost(host: string): string {
+  return host.replace(/\.local$/i, '');
+}
+
+function deriveStatusLine(session: LiveSession, path: string): string {
+  for (let i = session.messages.length - 1; i >= 0; i--) {
+    const message = session.messages[i];
+    if (messageRole(message.content) !== 'agent') continue;
+    const part = renderablePart(message.content);
+    if (part?.kind === 'text') {
+      const oneLine = part.text.trim().replace(/\s+/g, ' ');
+      return oneLine.length > 90 ? `${oneLine.slice(0, 90)}…` : oneLine;
+    }
+  }
+  return path;
+}
+
 interface SessionRowProps {
   session: LiveSession;
   collapsed: boolean;
@@ -51,6 +82,7 @@ function SessionRow({ session, collapsed, active }: SessionRowProps) {
   const metadata = session.metadata as { path?: string; host?: string } | null;
   const path = metadata?.path ?? session.id;
   const label = deriveTitle(session.metadata, session.messages) ?? path;
+  const statusLine = deriveStatusLine(session, path);
 
   return (
     <div
@@ -60,14 +92,16 @@ function SessionRow({ session, collapsed, active }: SessionRowProps) {
         event.dataTransfer.effectAllowed = 'copy';
       }}
       className={`sidebar-session ${active ? 'sidebar-session-active' : ''}`}
-      title={collapsed ? label : path}
+      title={collapsed ? label : `${path}\n\n${statusLine}`}
       onClick={() => focusSession(session.id)}
     >
       <span className={`status-dot ${statusClassOf(session)}`} title={`status: ${statusClassOf(session).replace('status-', '')}`} />
       {!collapsed && (
         <span className="sidebar-session-label">
-          {metadata?.host && <span className="sidebar-session-host">{metadata.host}</span>}
-          <span className="sidebar-session-title">{label}</span>
+          <span className="sidebar-session-title">
+            {metadata?.host && <span className="sidebar-session-host">{shortHost(metadata.host)}:</span>} {label}
+          </span>
+          <span className="sidebar-session-status">{statusLine}</span>
         </span>
       )}
       {!collapsed && (
@@ -107,7 +141,19 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
   const pinnedIds = usePinStore((s) => s.pinnedIds);
   const localMachineId = useHappyStore((s) => s.localMachineId);
   const machines = useHappyStore((s) => s.machines);
+  const sendMessage = useHappyStore((s) => s.sendMessage);
   const localHost = (machines.find((m) => m.id === localMachineId)?.metadata as { host?: string } | null)?.host;
+  const [summarizingAll, setSummarizingAll] = useState(false);
+
+  const onlineSessions = sessions.filter((s) => s.active);
+  const summarizeAll = async () => {
+    setSummarizingAll(true);
+    try {
+      await Promise.all(onlineSessions.map((s) => sendMessage(s.id, t('summarizeProgressPrompt')).catch(() => undefined)));
+    } finally {
+      setSummarizingAll(false);
+    }
+  };
 
   // Auto-collapse only fires at the moment the breakpoint is crossed, so it
   // never fights a manual toggle (or a manual drag-resize) made while
@@ -142,7 +188,7 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           onClick={() => (panelRef.current?.isCollapsed() ? panelRef.current?.expand() : panelRef.current?.collapse())}
         >
-          {collapsed ? '»' : '«'}
+          <LuPanelLeft size={15} strokeWidth={2} />
         </button>
       </div>
 
@@ -156,6 +202,21 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
         <div className="sidebar-tabs">
           <span className="sidebar-section-label">{t('workspaces')}</span>
           <TabBar />
+        </div>
+      )}
+
+      {!collapsed && ordered.length > 0 && (
+        <div className="sidebar-sessions-header">
+          <span className="sidebar-section-label">Sessions</span>
+          <button
+            type="button"
+            className="sidebar-summarize-all"
+            disabled={summarizingAll || onlineSessions.length === 0}
+            title="Ask every online session to report its current progress — updates the status line under each session below."
+            onClick={summarizeAll}
+          >
+            <LuSparkles size={12} strokeWidth={2} />
+          </button>
         </div>
       )}
 

@@ -319,6 +319,22 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   },
 
   async sendMessage(sessionId, text, meta) {
+    if (MOCK_ENABLED) {
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === sessionId
+            ? {
+                ...s,
+                messages: [
+                  ...s.messages,
+                  { id: `mock-msg-${crypto.randomUUID()}`, seq: s.messages.length, createdAt: Date.now(), content: { role: 'user', content: { type: 'text', text } } },
+                ],
+              }
+            : s,
+        ),
+      }));
+      return;
+    }
     await sendSessionMessage(requireHttp(), sessionId, requireSessionEncryptor(sessionId), text, meta);
   },
 

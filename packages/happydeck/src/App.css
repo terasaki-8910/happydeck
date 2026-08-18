@@ -18,6 +18,7 @@
   --status-online: #4ade80;
   --status-thinking: #f0a63c;
   --status-offline: #5a5a61;
+  --danger: #f27272;
 
   --font-ui:
     -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -163,6 +164,36 @@ body {
   color: var(--text);
 }
 
+.sidebar-sessions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 0;
+  flex-shrink: 0;
+}
+
+.sidebar-summarize-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.sidebar-summarize-all:hover:not(:disabled) {
+  background: var(--bg-tile);
+}
+
+.sidebar-summarize-all:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
 .sidebar-sessions {
   flex: 1;
   overflow-y: auto;
@@ -206,9 +237,9 @@ body {
 }
 
 .sidebar-session-host {
-  font-size: 9px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   color: var(--text-faint);
 }
 
@@ -217,6 +248,14 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sidebar-session-status {
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
 }
 
 .sidebar-empty {
@@ -265,14 +304,17 @@ body {
   flex-direction: column;
 }
 
+/* Spawn (new session) and tabs (workspaces / new tab) read as ONE
+   continuous "actions" group -- both a chat session and a workspace tab are
+   equally "not a chat" -- separated from the chat/session list below by a
+   single divider on .sidebar-tabs, not one between every sub-block. */
 .sidebar-spawn {
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 10px 4px;
   flex-shrink: 0;
 }
 
 .sidebar-tabs {
-  padding: 10px 10px 6px;
+  padding: 4px 10px 10px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   display: flex;
@@ -281,7 +323,10 @@ body {
 }
 
 .sidebar-section-label {
-  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-faint);
@@ -378,8 +423,22 @@ body {
   background: var(--border);
 }
 
-.session-menu-delete {
-  color: #f27272;
+.session-menu-popover button.session-menu-delete {
+  color: var(--danger);
+}
+
+.action-menu-popover button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-menu-popover button.action-menu-warn {
+  color: var(--accent);
+}
+
+.session-menu-popover button.action-menu-danger {
+  color: var(--danger);
 }
 
 .session-menu-rename {
@@ -426,6 +485,9 @@ body {
 }
 
 .spawn-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
   text-align: left;
   background: transparent;
@@ -643,6 +705,9 @@ body {
 }
 
 .tab-new {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--text-faint);
 }
 
@@ -891,19 +956,20 @@ body {
 }
 
 .agent-settings-trigger {
-  align-self: flex-start;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  background: none;
+  border: none;
   border-radius: 6px;
-  color: var(--text-dim);
-  font-size: 10.5px;
-  padding: 4px 9px;
+  padding: 0 6px;
   cursor: pointer;
 }
 
 .agent-settings-trigger:hover {
-  color: var(--text);
-  border-color: var(--text-faint);
+  background: var(--bg-tile);
 }
 
 .agent-settings-trigger:disabled {
@@ -911,11 +977,25 @@ body {
   cursor: default;
 }
 
+.agent-settings-pill {
+  color: var(--text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.agent-settings-pill + .agent-settings-pill::before {
+  content: '·';
+  margin-right: 4px;
+  color: var(--text-faint);
+}
+
 .agent-settings-popover {
-  bottom: 100%;
   top: auto;
+  bottom: 100%;
+  left: 0;
+  right: auto;
   margin-top: 0;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   min-width: 200px;
 }
 
@@ -1000,7 +1080,14 @@ body {
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+}
+
+/* Consecutive tool-call rows (Bash call, Read file, ...) read as an activity
+   log, not a conversation -- the default message-bubble padding between
+   each one left far more air than a one-line "• Bash call" needs. */
+.message-row:has(> .tile-tool-call) + .message-row:has(> .tile-tool-call) {
+  margin-top: -5px;
 }
 
 .tile-empty {
@@ -1176,6 +1263,8 @@ body {
 
 .tile-tool-call {
   white-space: normal;
+  padding-top: 1px;
+  padding-bottom: 1px;
 }
 
 .tile-tool-call-toggle {
@@ -1186,7 +1275,7 @@ body {
   border: none;
   color: var(--text-faint);
   font-size: 11px;
-  padding: 1px 0;
+  padding: 0;
   cursor: pointer;
 }
 
@@ -1228,11 +1317,30 @@ body {
   font-size: 11px;
 }
 
+/* One unified bordered "pill" box holds everything (+ menu, model/permission
+   pills, the growing textarea, send) instead of each control being its own
+   separate bordered box in a row -- matches how modern chat composers read
+   as a single input, not a strip of buttons next to an input. */
 .tile-composer {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 5px 6px;
+}
+
+.tile-composer:focus-within {
+  border-color: var(--accent);
+}
+
+.tile-composer-caption {
+  align-self: flex-start;
+  padding: 0 4px;
+  color: var(--text-faint);
+  font-size: 10.5px;
 }
 
 .slash-autocomplete {
@@ -1273,33 +1381,26 @@ body {
 
 .tile-composer-input {
   flex: 1;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  background: transparent;
+  border: none;
   color: var(--text);
-  font-size: 12px;
-  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.4;
+  padding: 6px 4px;
   min-width: 0;
+  min-height: 30px;
+  max-height: 140px;
+  overflow-y: auto;
+  resize: none;
 }
 
 .tile-composer-input:focus {
   outline: none;
-  border-color: var(--accent);
 }
 
-.tile-composer button {
-  background: var(--bg-tile);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text);
-  font-size: 12px;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-.tile-composer button:disabled {
-  opacity: 0.5;
-  cursor: default;
+.tile-composer-input:disabled {
+  opacity: 0.6;
 }
 
 .tile-composer-send {
@@ -1307,17 +1408,23 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-dim);
+  cursor: pointer;
 }
 
 .tile-composer-send:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
+  cursor: default;
 }
 
 .tile-composer-send:not(:disabled):hover {
-  border-color: var(--accent);
+  background: var(--bg-tile);
   color: var(--accent);
 }
 
@@ -1809,23 +1916,23 @@ body {
 
 .composer-plus-trigger {
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: none;
+  border: none;
   border-radius: 6px;
   color: var(--text-dim);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
 }
 
 .composer-plus-trigger:hover {
   color: var(--text);
-  border-color: var(--text-faint);
+  background: var(--bg-tile);
 }
 
 .tile-composer-summarize {

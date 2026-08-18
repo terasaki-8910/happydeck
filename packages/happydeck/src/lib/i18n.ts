@@ -8,9 +8,9 @@ import { useSettingsStore, type Language } from '../store/settingsStore';
  */
 const STRINGS = {
   en: {
-    newSession: '+ new session',
+    newSession: 'new session',
     workspaces: 'workspaces',
-    newTab: '+ new tab',
+    newTab: 'new tab',
     all: 'All',
     pinned: 'pinned',
     noSessions: 'no sessions',
@@ -31,6 +31,7 @@ const STRINGS = {
     statusOffline: 'offline',
     statusThinking: 'thinking',
     settingsGeneral: 'General',
+    settingsTerminal: 'Terminal',
     settingsAccount: 'Account',
     settingsPrivacy: 'Privacy',
     settingsClaudeMd: 'CLAUDE.md',
@@ -45,9 +46,9 @@ const STRINGS = {
     summarizeProgressPrompt: 'Briefly summarize your current progress on this task in 1-2 sentences.',
   },
   ja: {
-    newSession: '+ 新規セッション',
+    newSession: '新規セッション',
     workspaces: 'ワークスペース',
-    newTab: '+ 新規タブ',
+    newTab: '新規タブ',
     all: 'すべて',
     pinned: 'ピン留め',
     noSessions: 'セッションがありません',
@@ -68,6 +69,7 @@ const STRINGS = {
     statusOffline: 'オフライン',
     statusThinking: '思考中',
     settingsGeneral: '一般',
+    settingsTerminal: 'ターミナル',
     settingsAccount: 'アカウント',
     settingsPrivacy: 'プライバシー',
     settingsClaudeMd: 'CLAUDE.md',

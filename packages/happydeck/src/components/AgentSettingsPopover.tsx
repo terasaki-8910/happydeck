@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES, type ModeOption } from '../lib/agentOptions';
+import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES, compactModelLabel, type ModeOption } from '../lib/agentOptions';
 
 interface AgentSettingsPopoverProps {
   permissionMode: string;
@@ -13,7 +13,13 @@ function labelOf(options: ModeOption[], key: string): string {
   return options.find((o) => o.key === key)?.name ?? key;
 }
 
-/** Replaces 3 separate <select>s with one popover (model/effort/permission), Claude-app style. */
+/**
+ * Compact composer-row trigger (permission pill + model pill, opening
+ * upward) for the full Model/Effort/Permission popover. The verbose
+ * "model · effort · permission" summary lives separately, below the
+ * composer box (see SessionTile) — this is just the quick-glance/
+ * quick-switch affordance.
+ */
 export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, busy, onChange }: AgentSettingsPopoverProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -33,8 +39,6 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
       window.removeEventListener('keydown', onEscape);
     };
   }, [open]);
-
-  const summary = `${labelOf(CLAUDE_MODEL_MODES, modelMode)} · ${labelOf(CLAUDE_EFFORT_LEVELS, effortLevel)} · ${labelOf(CLAUDE_PERMISSION_MODES, permissionMode)}`;
 
   const section = (title: string, options: ModeOption[], current: string, key: 'permissionMode' | 'modelMode' | 'effortLevel') => (
     <div className="agent-settings-section">
@@ -60,7 +64,8 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
   return (
     <div className="session-menu agent-settings" ref={rootRef}>
       <button type="button" className="agent-settings-trigger" disabled={busy} onClick={() => setOpen((v) => !v)}>
-        {summary}
+        <span className="agent-settings-pill">{labelOf(CLAUDE_PERMISSION_MODES, permissionMode)}</span>
+        <span className="agent-settings-pill">{compactModelLabel(modelMode)}</span>
       </button>
 
       {open && (
@@ -73,5 +78,14 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
         </div>
       )}
     </div>
+  );
+}
+
+/** Full "model · effort · permission" detail line — meant to sit below the composer box, not inside it. */
+export function AgentSettingsCaption({ permissionMode, modelMode, effortLevel }: { permissionMode: string; modelMode: string; effortLevel: string }) {
+  return (
+    <span className="tile-composer-caption">
+      {labelOf(CLAUDE_MODEL_MODES, modelMode)} · {labelOf(CLAUDE_EFFORT_LEVELS, effortLevel)} · {labelOf(CLAUDE_PERMISSION_MODES, permissionMode)}
+    </span>
   );
 }

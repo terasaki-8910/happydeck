@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { LuSendHorizontal, LuSparkles } from 'react-icons/lu';
+import { LuSendHorizontal } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { downloadTranscript } from '../lib/exportTranscript';
@@ -11,7 +11,7 @@ import { type AgentState, type LiveSession, useHappyStore } from '../store/happy
 import { useSelectionStore } from '../store/selectionStore';
 import { useSettingsStore } from '../store/settingsStore';
 import type { Workspace } from '../store/workspaceStore';
-import { AgentSettingsPopover } from './AgentSettingsPopover';
+import { AgentSettingsCaption, AgentSettingsPopover } from './AgentSettingsPopover';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { SlashCommandAutocomplete } from './SlashCommandAutocomplete';
 import { TileActionsMenu } from './TileActionsMenu';
@@ -84,10 +84,12 @@ export function SessionTile({
   const allowRequest = useHappyStore((s) => s.allowRequest);
   const denyRequest = useHappyStore((s) => s.denyRequest);
   const abortSession = useHappyStore((s) => s.abortSession);
+  const resumeSession = useHappyStore((s) => s.resumeSession);
   const killSession = useHappyStore((s) => s.killSession);
   const isSelected = useSelectionStore((s) => s.selected.has(session.id));
   const toggleSelected = useSelectionStore((s) => s.toggle);
   const terminalApp = useSettingsStore((s) => s.terminalApp);
+  const terminalWindowMode = useSettingsStore((s) => s.terminalWindowMode);
   const sshTargets = useSettingsStore((s) => s.sshTargets);
   const runMachineBash = useHappyStore((s) => s.runMachineBash);
 
@@ -100,6 +102,7 @@ export function SessionTile({
   const [slashDismissed, setSlashDismissed] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
 
   const status = statusOf(session);
   const metadata = session.metadata as
@@ -146,6 +149,16 @@ export function SessionTile({
     isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
 
+  // Grows the composer with the draft's content (multi-line pasted/typed
+  // text), capped by max-height in CSS where it starts scrolling internally
+  // instead of pushing the rest of the tile around indefinitely.
+  useEffect(() => {
+    const el = composerInputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
+
   const runAction = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setActionError(null);
@@ -158,12 +171,16 @@ export function SessionTile({
     }
   };
 
-  const handleSend = (event: FormEvent) => {
-    event.preventDefault();
+  const submitDraft = () => {
     const text = draft.trim();
     if (!text) return;
     setDraft('');
     runAction(() => sendMessage(session.id, text));
+  };
+
+  const handleSend = (event: FormEvent) => {
+    event.preventDefault();
+    submitDraft();
   };
 
   // Slash-command autocomplete: only while the draft is still exactly
@@ -178,20 +195,27 @@ export function SessionTile({
     setSlashDismissed(true);
   };
 
-  const handleComposerKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (slashMatches.length === 0) return;
-    if (event.key === 'ArrowDown') {
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashMatches.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setSlashHighlight((i) => (i + 1) % slashMatches.length);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setSlashHighlight((i) => (i - 1 + slashMatches.length) % slashMatches.length);
+      } else if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault();
+        selectSlashCommand(slashMatches[Math.min(slashHighlight, slashMatches.length - 1)]);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        setSlashDismissed(true);
+      }
+      return;
+    }
+    // Enter sends; Shift+Enter (or any other modifier) inserts a newline like every other chat composer.
+    if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      setSlashHighlight((i) => (i + 1) % slashMatches.length);
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setSlashHighlight((i) => (i - 1 + slashMatches.length) % slashMatches.length);
-    } else if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault();
-      selectSlashCommand(slashMatches[Math.min(slashHighlight, slashMatches.length - 1)]);
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      setSlashDismissed(true);
+      submitDraft();
     }
   };
 
@@ -284,16 +308,17 @@ export function SessionTile({
           title={title}
           busy={busy}
           onAbort={() => runAction(() => abortSession(session.id))}
+          onResume={() => runAction(() => resumeSession(session.id))}
           onDownload={() => runAction(() => downloadTranscript(session))}
           onKill={() => runAction(() => killSession(session.id))}
           onOpenTerminal={
             metadata?.path && localMachineId
               ? () =>
                   runAction(() => {
-                    if (isLocalSession) return openInTerminal(localMachineId, metadata.path as string, terminalApp, runMachineBash);
+                    if (isLocalSession) return openInTerminal(localMachineId, metadata.path as string, terminalApp, terminalWindowMode, runMachineBash);
                     const sshTarget = metadata.machineId ? sshTargets[metadata.machineId] : undefined;
-                    if (!sshTarget) throw new Error(`No SSH target configured for ${metadata.host ?? 'this machine'} — set one in Settings > Account.`);
-                    return openInTerminal(localMachineId, metadata.path as string, terminalApp, runMachineBash, {
+                    if (!sshTarget) throw new Error(`No SSH target configured for ${metadata.host ?? 'this machine'} — set one in Settings > Terminal.`);
+                    return openInTerminal(localMachineId, metadata.path as string, terminalApp, terminalWindowMode, runMachineBash, {
                       sshTarget,
                       platform: remoteMachinePlatform,
                     });
@@ -344,13 +369,6 @@ export function SessionTile({
       </div>
 
       <div className="tile-bottom-bar">
-        <AgentSettingsPopover
-          permissionMode={metadata?.permissionMode ?? 'default'}
-          modelMode={metadata?.modelMode ?? 'default'}
-          effortLevel={metadata?.effortLevel ?? 'medium'}
-          busy={busy}
-          onChange={(patch) => runAction(() => setAgentModes(session.id, patch))}
-        />
         <form className="tile-composer" onSubmit={handleSend}>
           <SlashCommandAutocomplete matches={slashMatches} highlightedIndex={slashHighlight} onSelect={selectSlashCommand} />
           <ComposerPlusMenu
@@ -358,18 +376,17 @@ export function SessionTile({
             mcpServers={metadata?.mcpServers ?? []}
             onInsertSlashCommand={(command) => setDraft((d) => `${d}/${command} `)}
           />
-          <button
-            type="button"
-            className="tile-composer-summarize"
-            disabled={busy}
-            title={t('summarizeProgress')}
-            aria-label={t('summarizeProgress')}
-            onClick={() => runAction(() => sendMessage(session.id, t('summarizeProgressPrompt')))}
-          >
-            <LuSparkles size={15} strokeWidth={2} />
-          </button>
-          <input
+          <AgentSettingsPopover
+            permissionMode={metadata?.permissionMode ?? 'default'}
+            modelMode={metadata?.modelMode ?? 'default'}
+            effortLevel={metadata?.effortLevel ?? 'medium'}
+            busy={busy}
+            onChange={(patch) => runAction(() => setAgentModes(session.id, patch))}
+          />
+          <textarea
+            ref={composerInputRef}
             className="tile-composer-input"
+            rows={1}
             value={draft}
             disabled={busy}
             placeholder={t('messagePlaceholder')}
@@ -381,9 +398,14 @@ export function SessionTile({
             onKeyDown={handleComposerKeyDown}
           />
           <button type="submit" className="tile-composer-send" disabled={busy || !draft.trim()} title={t('send')} aria-label={t('send')}>
-            <LuSendHorizontal size={23} strokeWidth={2.25} />
+            <LuSendHorizontal size={40} strokeWidth={2} />
           </button>
         </form>
+        <AgentSettingsCaption
+          permissionMode={metadata?.permissionMode ?? 'default'}
+          modelMode={metadata?.modelMode ?? 'default'}
+          effortLevel={metadata?.effortLevel ?? 'medium'}
+        />
       </div>
     </section>
   );

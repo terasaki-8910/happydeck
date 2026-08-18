@@ -1,4 +1,5 @@
 import { type DragEvent, useState } from 'react';
+import { LuPlus } from 'react-icons/lu';
 import { SESSION_DRAG_MIME } from '../lib/dnd';
 import { useT } from '../lib/i18n';
 import { useViewStore } from '../store/viewStore';
@@ -110,6 +111,7 @@ export function TabBar() {
         />
       ) : (
         <button type="button" className="tab tab-new" onClick={() => setCreating(true)}>
+          <LuPlus size={11} strokeWidth={2.5} />
           {t('newTab')}
         </button>
       )}

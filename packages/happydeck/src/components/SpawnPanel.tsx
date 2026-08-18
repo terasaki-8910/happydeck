@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from 'react';
+import { LuPlus } from 'react-icons/lu';
 import { useT } from '../lib/i18n';
 import { useHappyStore } from '../store/happyStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -69,6 +70,7 @@ export function SpawnPanel() {
   if (!open) {
     return (
       <button type="button" className="spawn-toggle" onClick={() => setOpen(true)}>
+        <LuPlus size={13} strokeWidth={2.5} />
         {t('newSession')}
       </button>
     );

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { LuDownload, LuOctagonPause, LuPlay, LuSkull, LuTerminal } from 'react-icons/lu';
 import { useT } from '../lib/i18n';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -6,14 +7,15 @@ interface TileActionsMenuProps {
   title: string;
   busy: boolean;
   onAbort: () => void;
+  onResume: () => void;
   onDownload: () => void;
   onKill: () => void;
   /** Present only when this session is running on this machine — opening a real terminal window only makes sense for a path that actually exists locally. Undefined hides the option. Routed through the parent's runAction so a failure (e.g. Terminal.app missing) surfaces in the tile's error banner instead of failing silently. */
   onOpenTerminal?: () => void;
 }
 
-/** The "⋮" menu in a session tile's header: abort / download / open-in-terminal / kill. Kill needs its own confirm. */
-export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, onOpenTerminal }: TileActionsMenuProps) {
+/** The "⋮" menu in a session tile's header: abort/resume / download / open-in-terminal / kill. Kill needs its own confirm. */
+export function TileActionsMenu({ title, busy, onAbort, onResume, onDownload, onKill, onOpenTerminal }: TileActionsMenuProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [confirmingKill, setConfirmingKill] = useState(false);
@@ -50,9 +52,10 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, onOp
       </button>
 
       {open && (
-        <div className="session-menu-popover" onClick={(event) => event.stopPropagation()}>
+        <div className="session-menu-popover action-menu-popover" onClick={(event) => event.stopPropagation()}>
           <button
             type="button"
+            className="action-menu-warn"
             disabled={busy}
             title="Stop the current tool use and have the agent wait — the session process keeps running."
             onClick={() => {
@@ -60,7 +63,20 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, onOp
               setOpen(false);
             }}
           >
+            <LuOctagonPause size={14} />
             {t('abort')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            title="Wake a waiting session back up."
+            onClick={() => {
+              onResume();
+              setOpen(false);
+            }}
+          >
+            <LuPlay size={14} />
+            {t('resume')}
           </button>
           <button
             type="button"
@@ -70,6 +86,7 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, onOp
               setOpen(false);
             }}
           >
+            <LuDownload size={14} />
             {t('downloadTranscript')}
           </button>
           {onOpenTerminal && (
@@ -81,19 +98,21 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, onOp
                 setOpen(false);
               }}
             >
+              <LuTerminal size={14} />
               {t('openInTerminal')}
             </button>
           )}
           <div className="session-menu-divider" />
           <button
             type="button"
-            className="session-menu-delete"
+            className="action-menu-danger"
             disabled={busy}
             onClick={() => {
               setConfirmingKill(true);
               setOpen(false);
             }}
           >
+            <LuSkull size={14} />
             {t('killProcess')}
           </button>
         </div>
