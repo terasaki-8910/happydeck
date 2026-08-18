@@ -70,6 +70,24 @@ body {
   background: var(--accent);
 }
 
+/* A Separator's own aria-orientation is the axis of the *line it draws*,
+   which is the opposite of its parent Group's layout orientation — a
+   vertically-stacked Group (top/bottom panes) gets a horizontal divider
+   line you drag up/down. The default rule above only covers the
+   horizontal-Group case (vertical line, col-resize); this covers the
+   other one. Without it the vertical-line-drawing default's `width: 1px`
+   was inherited here too, collapsing these to `height: 0` — invisible and
+   unusable, not just visually off. */
+.pane-separator[aria-orientation='horizontal'] {
+  width: 100%;
+  height: 1px;
+  cursor: row-resize;
+}
+
+.pane-separator[aria-orientation='horizontal']::after {
+  inset: -3px 0;
+}
+
 .app-main {
   height: 100%;
   display: flex;
@@ -1243,9 +1261,13 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
+}
+
+.tile-composer-send:disabled {
+  opacity: 0.6;
 }
 
 .tile-composer-send:not(:disabled):hover {

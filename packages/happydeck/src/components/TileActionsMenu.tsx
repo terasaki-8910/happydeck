@@ -1,3 +1,4 @@
+import { openPath } from '@tauri-apps/plugin-opener';
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../lib/i18n';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -8,10 +9,12 @@ interface TileActionsMenuProps {
   onAbort: () => void;
   onDownload: () => void;
   onKill: () => void;
+  /** The session's working directory, only when it's running on this machine — opening a real Terminal/iTerm window only makes sense for a path that actually exists locally. Undefined hides both options. */
+  localPath?: string;
 }
 
-/** The "⋮" menu in a session tile's header: abort / download / kill. Kill needs its own confirm. */
-export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill }: TileActionsMenuProps) {
+/** The "⋮" menu in a session tile's header: abort / download / open-in-terminal / kill. Kill needs its own confirm. */
+export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill, localPath }: TileActionsMenuProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [confirmingKill, setConfirmingKill] = useState(false);
@@ -70,6 +73,28 @@ export function TileActionsMenu({ title, busy, onAbort, onDownload, onKill }: Ti
           >
             {t('downloadTranscript')}
           </button>
+          {localPath && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  openPath(localPath, 'Terminal');
+                  setOpen(false);
+                }}
+              >
+                {t('openInTerminal')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  openPath(localPath, 'iTerm');
+                  setOpen(false);
+                }}
+              >
+                {t('openInIterm')}
+              </button>
+            </>
+          )}
           <div className="session-menu-divider" />
           <button
             type="button"

@@ -72,6 +72,7 @@ export function SessionTile({
   onClosePane,
 }: SessionTileProps) {
   const t = useT();
+  const localMachineId = useHappyStore((s) => s.localMachineId);
   const sendMessage = useHappyStore((s) => s.sendMessage);
   const setAgentModes = useHappyStore((s) => s.setAgentModes);
   const renameSession = useHappyStore((s) => s.renameSession);
@@ -92,10 +93,22 @@ export function SessionTile({
 
   const status = statusOf(session);
   const metadata = session.metadata as
-    | { path?: string; host?: string; permissionMode?: string; modelMode?: string; effortLevel?: string; slashCommands?: string[]; mcpServers?: { name: string; status: string }[] }
+    | {
+        path?: string;
+        host?: string;
+        machineId?: string;
+        permissionMode?: string;
+        modelMode?: string;
+        effortLevel?: string;
+        slashCommands?: string[];
+        mcpServers?: { name: string; status: string }[];
+      }
     | null;
   const path = metadata?.path ?? session.id;
   const title = deriveTitle(session.metadata, session.messages) ?? path;
+  // Opening a real Terminal/iTerm window only makes sense for a path that
+  // exists on this machine — a remote session's path lives on its own box.
+  const localPath = metadata?.path && metadata.machineId === localMachineId ? metadata.path : undefined;
   const agentState = session.agentState as AgentState | null;
   const pendingRequests = Object.entries(agentState?.requests ?? {});
   const visibleMessages = session.messages
@@ -230,6 +243,7 @@ export function SessionTile({
           onAbort={() => runAction(() => abortSession(session.id))}
           onDownload={() => runAction(() => downloadTranscript(session))}
           onKill={() => runAction(() => killSession(session.id))}
+          localPath={localPath}
         />
       </header>
 
@@ -295,7 +309,7 @@ export function SessionTile({
             onChange={(event) => setDraft(event.target.value)}
           />
           <button type="submit" className="tile-composer-send" disabled={busy || !draft.trim()} title={t('send')} aria-label={t('send')}>
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">
               <path d="M1.05 1.55 14.8 7.65a.6.6 0 0 1 0 1.1L1.05 14.85a.6.6 0 0 1-.85-.66L2.4 8 .2 2.2a.6.6 0 0 1 .85-.65Z" />
             </svg>
           </button>
