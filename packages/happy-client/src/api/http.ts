@@ -24,7 +24,13 @@ export class HttpTimeoutError extends Error {
   }
 }
 
-const REQUEST_TIMEOUT_MS = 15_000;
+// 15s turned out to fire on legitimate-but-slow requests (a relay round
+// trip over Tailscale, under load from a bootstrap that fires one request
+// per session in parallel) -- confirmed live: it surfaced as repeated
+// "Fetch is aborted" failures on real accounts with many sessions, not just
+// on genuine hangs. 30s trades a bit of worst-case hang time for far fewer
+// false-positive aborts.
+const REQUEST_TIMEOUT_MS = 30_000;
 
 async function safeText(response: Response): Promise<string> {
   try {
@@ -53,7 +59,13 @@ export class HttpClient {
     try {
       return await fetch(url, { ...init, headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'TimeoutError') {
+      // Confirmed live: WKWebView's fetch() doesn't throw the spec-named
+      // TimeoutError for an AbortSignal.timeout() abort — it throws a plain
+      // AbortError with the message "Fetch is aborted", which is exactly
+      // the unfriendly text that reached the user instead of
+      // HttpTimeoutError's message. Nothing else aborts this request (no
+      // caller passes its own signal), so any abort here is the timeout.
+      if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
         throw new HttpTimeoutError(path);
       }
       throw error;

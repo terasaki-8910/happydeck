@@ -186,13 +186,24 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
       sessionEncryptors = new Map(allSessions.map((s) => [s.id, encryption.openEncryption(s.dataKey)]));
       machineEncryptors = new Map(allMachines.map((m) => [m.id, encryption.openEncryption(m.dataKey)]));
 
-      const liveSessions: LiveSession[] = await Promise.all(
-        allSessions.map(async (session) => {
-          const encryptor = sessionEncryptors.get(session.id)!;
-          const messages = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, session.id, 20));
-          return { ...session, messages: [...messages].reverse(), thinking: false };
-        }),
-      );
+      // Promise.all here would let ONE slow/failed session's message fetch
+      // reject the whole bootstrap — confirmed live: with enough sessions,
+      // one request tripping the timeout took down the entire load, so a
+      // retry kept landing back on the same failure instead of ever
+      // reaching a usable state. allSettled + per-session fallback matches
+      // this app's existing resilience rule elsewhere (a broken row doesn't
+      // take the whole list down with it) — a session that fails to load
+      // its messages still shows up, just empty, rather than vanishing the
+      // entire account's session list.
+      const liveSessions: LiveSession[] = (
+        await Promise.allSettled(
+          allSessions.map(async (session) => {
+            const encryptor = sessionEncryptors.get(session.id)!;
+            const messages = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, session.id, 20));
+            return { ...session, messages: [...messages].reverse(), thinking: false };
+          }),
+        )
+      ).map((result, i) => (result.status === 'fulfilled' ? result.value : { ...allSessions[i], messages: [], thinking: false }));
 
       set({ status: 'ready', localMachineId, sessions: liveSessions, machines: allMachines });
 
