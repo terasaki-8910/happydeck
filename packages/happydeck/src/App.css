@@ -38,20 +38,23 @@
      isn't redefined in the light overrides below. */
   --toggle-knob-on: #0b0b0c;
 
-  /* "plan" keeps the official Happy app's own green (happy-app's theme.ts,
-     theme.colors.permission.plan — not guessed). accept-edits/bypass
-     deliberately DIVERGE from that reference (blue/orange there) — those
-     don't track the actual risk gradient: accept-edits auto-approves
-     edits and common commands without asking (confirmed against Claude
-     Code's own docs), bypass skips every check. Recolored to a severity
-     ramp instead — yellow (caution, still asks for some things) below
-     red (bypass reuses --danger outright: same "this is the dangerous
-     one" semantic already used for kill/delete elsewhere in this app, not
-     a separate invented red). "dontAsk" has no official mapping either
-     way (Claude-specific, absent from happy-app's own semantic-kind
-     ternary) and isn't part of this permissiveness gradient anyway — it
-     auto-DENIES rather than auto-approves — so it stays neutral/unstyled. */
-  --permission-plan: #32d74b;
+  /* accept-edits/bypass deliberately DIVERGE from happy-app's own
+     blue/orange (theme.colors.permission.*) — those don't track the
+     actual risk gradient: accept-edits auto-approves edits and common
+     commands without asking (confirmed against Claude Code's own docs),
+     bypass skips every check. Recolored to a severity ramp instead —
+     yellow (caution, still asks for some things) below red (bypass
+     reuses --danger outright: same "this is the dangerous one" semantic
+     already used for kill/delete elsewhere in this app, not a separate
+     invented red). Plan shifted off the official app's pure green to a
+     cooler, teal-leaning emerald per explicit request ("もうちょっと
+     青みがかかってる") — no longer strict parity with the reference app,
+     matching the same call already made for accept-edits/bypass.
+     "dontAsk" has no official mapping either way (Claude-specific, absent
+     from happy-app's own semantic-kind ternary) and isn't part of this
+     permissiveness gradient anyway — it auto-DENIES rather than
+     auto-approves — so it stays neutral/unstyled. */
+  --permission-plan: #34d399;
   --permission-accept-edits: #ffd60a;
   --permission-bypass: var(--danger);
 
@@ -77,11 +80,14 @@
     --danger: #dc2626;
     --danger-border: #f0b8b8;
     --link: #2563eb;
-    --permission-plan: #34c759;
-    /* #ffd60a fails WCAG as text on white (~1.5:1) — darkened+desaturated
-       to a goldenrod that still reads as "yellow" while passing AA (~4.9:1),
-       same treatment --accent-text already gets for the same reason. */
-    --permission-accept-edits: #8a6d00;
+    --permission-plan: #047857;
+    /* #ffd60a fails WCAG as text on white (~1.5:1). #8a6d00 (an early pass
+       at fixing that) passed contrast but read as visibly muddy/olive —
+       darkening a yellow toward AA compliance drags it that direction
+       almost unavoidably; amber-700 leans warmer/more orange instead of
+       yellow-green, reading as a deliberate amber rather than a dirty
+       yellow, while still passing (~5.0:1). */
+    --permission-accept-edits: #b45309;
     --permission-bypass: var(--danger);
   }
 }
@@ -99,8 +105,8 @@
   --danger: #dc2626;
   --danger-border: #f0b8b8;
   --link: #2563eb;
-  --permission-plan: #34c759;
-  --permission-accept-edits: #8a6d00;
+  --permission-plan: #047857;
+  --permission-accept-edits: #b45309;
   --permission-bypass: var(--danger);
 }
 
@@ -328,11 +334,11 @@ body {
    the title's own span shrink keeps it visible on every row. */
 .sidebar-session-host {
   flex-shrink: 0;
-  max-width: 88px;
+  max-width: 64px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 9.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-dim);
@@ -341,7 +347,8 @@ body {
 .sidebar-session-title {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -505,6 +512,17 @@ body {
   font-size: 11px;
   color: var(--text-dim);
   white-space: nowrap;
+}
+
+/* Destructive, at rest — not just on hover — so it reads as "this is the
+   dangerous one" among the neutral sidebar/titlebar icons next to it. */
+.bulk-kill-trigger {
+  color: var(--danger);
+}
+
+.bulk-kill-trigger:hover:not(:disabled) {
+  background: var(--danger-border);
+  color: var(--danger);
 }
 
 /* Right-clicking a sidebar row opens this menu at the cursor instead of
@@ -1867,9 +1885,17 @@ body {
   cursor: pointer;
 }
 
+/* Filled, not just red text on a neutral button — a destructive confirm
+   (kill, delete) reads as noticeably more dangerous than the cancel button
+   right next to it, not merely differently-colored the same shape/weight. */
 .confirm-danger {
-  color: var(--danger);
-  border-color: var(--danger-border);
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.confirm-danger:hover {
+  filter: brightness(1.08);
 }
 
 .browser-dialog {
