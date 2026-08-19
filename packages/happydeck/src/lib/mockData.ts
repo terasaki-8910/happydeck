@@ -20,6 +20,16 @@ function textMsg(id: string, seq: number, role: 'user' | 'agent', text: string, 
   return { id, seq, createdAt, content: { role, content: { type: 'text', text } } };
 }
 
+/** Text typed directly into the CLI's own terminal — mirrored via the session-protocol envelope, not a plain role:'user' message. */
+function terminalTextMsg(id: string, seq: number, text: string, createdAt: number) {
+  return {
+    id,
+    seq,
+    createdAt,
+    content: { role: 'session', content: { role: 'user', ev: { t: 'text', text } } },
+  };
+}
+
 function toolCallMsg(id: string, seq: number, createdAt: number, name: string, title: string, args: Record<string, unknown>) {
   return {
     id,
@@ -72,9 +82,10 @@ export function mockSessions(): LiveSession[] {
         titleMsg('m1-0', 1, now - 500000, 'Fix the sidebar collapse animation'),
         textMsg('m1-1', 2, 'user', 'Can you explain what changed in the last refactor? Use a table if it helps.', now - 400000),
         toolCallMsg('m1-2', 3, now - 390000, 'Read', 'Read', { file_path: 'src/App.tsx' }),
+        terminalTextMsg('m1-2b', 4, 'actually also check the sidebar CSS while you\'re in there', now - 350000),
         textMsg(
           'm1-3',
-          4,
+          5,
           'agent',
           '## Summary\n\nHere is what changed:\n\n| Area | Before | After |\n|---|---|---|\n| Layout | fixed width | resizable |\n| Sidebar | CSS toggle | Panel API |\n\n**Key point:** the `Panel` component must be a *direct* child of `Group` — see `src/App.tsx`.\n\n```ts\nconst ref = useRef<PanelImperativeHandle>(null)\n```\n\nLet me know if you want more detail.',
           now - 300000,

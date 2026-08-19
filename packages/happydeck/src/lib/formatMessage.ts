@@ -117,7 +117,19 @@ export function messageRole(content: unknown): 'user' | 'agent' | 'system' {
     if (record.role === 'user') {
       return 'user';
     }
-    if (record.role === 'agent' || record.role === 'session') {
+    // A session-protocol envelope (happy-wire's SessionEnvelope) carries its
+    // own role separately from this outer wrapper — text typed directly
+    // into the CLI's own terminal arrives this way (the local-transcript
+    // scanner mirrors it as role:'session' with an inner role:'user'
+    // envelope), not as a plain role:'user' message like something sent
+    // through happydeck itself. Without checking the inner role, it read
+    // as an agent reply — no bubble, left-aligned, no way to tell the user
+    // said it.
+    if (record.role === 'session') {
+      const envelope = record.content as Record<string, unknown> | undefined;
+      return envelope?.role === 'user' ? 'user' : 'agent';
+    }
+    if (record.role === 'agent') {
       return 'agent';
     }
   }
