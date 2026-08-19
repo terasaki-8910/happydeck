@@ -35,10 +35,14 @@ export function ComposerPlusMenu({ slashCommands, mcpServers, onInsertSlashComma
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false);
     };
-    document.addEventListener('mousedown', onOutside);
+    // Capture phase — Tauri's own drag-region mousedown listener
+    // (data-tauri-drag-region, the titlebar) calls stopImmediatePropagation
+    // for clicks landing there, which would otherwise swallow this before
+    // a bubble-phase document listener ever saw it.
+    document.addEventListener('mousedown', onOutside, true);
     window.addEventListener('keydown', onEscape);
     return () => {
-      document.removeEventListener('mousedown', onOutside);
+      document.removeEventListener('mousedown', onOutside, true);
       window.removeEventListener('keydown', onEscape);
     };
   }, [open]);

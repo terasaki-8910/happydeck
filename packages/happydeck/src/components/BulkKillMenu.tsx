@@ -41,8 +41,15 @@ export function BulkKillMenu() {
     const onOutside = (event: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
     };
-    document.addEventListener('mousedown', onOutside);
-    return () => document.removeEventListener('mousedown', onOutside);
+    // Capture phase, not bubble — Tauri's own document-level drag-region
+    // mousedown listener (window/scripts/drag.js) calls
+    // stopImmediatePropagation() for any click landing on a
+    // data-tauri-drag-region element (the titlebar), which runs before any
+    // later-registered bubble-phase listener on document ever fires.
+    // Capture fires first regardless of registration order, so this
+    // still sees the click.
+    document.addEventListener('mousedown', onOutside, true);
+    return () => document.removeEventListener('mousedown', onOutside, true);
   }, [open]);
 
   useEffect(() => {
@@ -91,7 +98,7 @@ export function BulkKillMenu() {
     <div className="bulk-kill" ref={rootRef}>
       <button
         type="button"
-        className="sidebar-footer-icon"
+        className="sidebar-footer-icon bulk-kill-trigger"
         title={t('killSessions')}
         onClick={() => setOpen((v) => !v)}
         disabled={busy}
