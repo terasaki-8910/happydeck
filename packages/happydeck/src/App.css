@@ -485,6 +485,28 @@ body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
+.bulk-kill {
+  position: relative;
+}
+
+/* Sits near the window's left edge (titlebar), not the sidebar's right edge
+   like a session's own action menu -- anchor from the button's own left
+   edge instead of the base rule's right:4px, so it grows rightward into
+   open space instead of immediately running into the traffic lights. */
+.bulk-kill-popover {
+  top: calc(100% + 4px);
+  left: 0;
+  right: auto;
+  min-width: 200px;
+}
+
+.bulk-kill-result {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
 /* Right-clicking a sidebar row opens this menu at the cursor instead of
    anchored under the "⋮" trigger — left/top are set inline (raw click
    position, then clamped to the viewport once the popover's real size is

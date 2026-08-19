@@ -3,6 +3,7 @@ import { Group, Panel, type PanelImperativeHandle, Separator } from 'react-resiz
 import { LuPanelLeft, LuSearch } from 'react-icons/lu';
 import './App.css';
 import { BulkActionBar } from './components/BulkActionBar';
+import { BulkKillMenu } from './components/BulkKillMenu';
 import { LinkDeviceView } from './components/LinkDeviceView';
 import { PaneTreeView } from './components/PaneTreeView';
 import { SessionTile } from './components/SessionTile';
@@ -287,6 +288,7 @@ function App() {
           <button type="button" className="sidebar-footer-icon" title={`${t('search')} (⌘F)`} onClick={() => setSearchOpen(true)}>
             <LuSearch size={15} strokeWidth={2} />
           </button>
+          <BulkKillMenu />
         </div>
       </div>
       <Group orientation="horizontal" className="app-shell">
