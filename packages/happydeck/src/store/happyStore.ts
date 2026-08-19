@@ -245,7 +245,14 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
             encryptor.decrypt([decodeBase64(message.content.c, 'base64')]).then(([content]) => {
               const newMessage = { id: message.id, seq: message.seq, createdAt: message.createdAt, content: content ?? null };
               set((state) => ({
-                sessions: state.sessions.map((s) => (s.id === sid ? { ...s, messages: [...s.messages, newMessage] } : s)),
+                sessions: state.sessions.map((s) =>
+                  // A flaky connection (reconnects, at-least-once socket
+                  // delivery) can redeliver the same new-message event —
+                  // confirmed live as the same message rendering several
+                  // times in a row on a machine with an unstable link.
+                  // Appending unconditionally had no defense against that.
+                  s.id === sid && !s.messages.some((m) => m.id === newMessage.id) ? { ...s, messages: [...s.messages, newMessage] } : s,
+                ),
               }));
             });
             return;
