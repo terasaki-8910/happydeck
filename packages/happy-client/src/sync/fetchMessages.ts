@@ -78,13 +78,21 @@ export function fetchLatestMessages(
   return fetchMessagesPage(http, encryptor, sessionId, SEQ_BACKWARD_INITIAL_SENTINEL, limit);
 }
 
+// The server's documented max for this endpoint (.claude/plans — "既定100・
+// 最大500"). An explicit "load older" click is a deliberate ask for more
+// history (unlike the fast-first-paint bootstrap load above), and a raw
+// page this size still nets out to a much smaller VISIBLE page after
+// renderablePart filters out protocol noise (turn markers, tool-call-end)
+// — so the default page size read as "barely loads anything more" per click.
+const OLDER_PAGE_LIMIT = 500;
+
 /** The page immediately older than `oldestLoadedSeq` — for a "load older messages" action once the newest page's `hasMore` is true. */
 export function fetchOlderMessages(
   http: HttpClient,
   encryptor: Encryptor & Decryptor,
   sessionId: string,
   oldestLoadedSeq: number,
-  limit = DEFAULT_PAGE_LIMIT,
+  limit = OLDER_PAGE_LIMIT,
 ): Promise<MessagesPage> {
   return fetchMessagesPage(http, encryptor, sessionId, oldestLoadedSeq, limit);
 }
