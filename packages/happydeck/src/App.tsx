@@ -275,7 +275,7 @@ function App() {
 
   return (
     <>
-      <div className="titlebar" data-tauri-drag-region>
+      <div className="titlebar" data-tauri-drag-region="deep">
         <div className="titlebar-controls">
           <button
             type="button"

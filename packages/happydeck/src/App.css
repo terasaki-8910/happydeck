@@ -138,7 +138,11 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  height: 40px;
+  /* Taller than a strict traffic-light-height minimum on purpose — a thin
+     strip reads as a "divider," not a header, and is an easy-to-miss drag
+     target; this gives a roomier grab area to go with drag-region="deep"
+     below. */
+  height: 44px;
   padding-left: 78px;
   background: var(--bg-tile);
   border-bottom: 1px solid var(--border);
