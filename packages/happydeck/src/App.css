@@ -137,7 +137,19 @@ body {
 .titlebar {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
+  /* NOT center — confirmed by reading wry's own inset_traffic_lights
+     (wkwebview/class/wry_web_view_parent.rs): trafficLightPosition's y
+     only grows the invisible native title-bar container that hosts the
+     buttons (title_bar_frame_height = button_height + y); only x ever
+     gets applied to the buttons themselves (button.setFrameOrigin sets
+     origin.x, never origin.y). The buttons stay pinned near the TOP of
+     that container regardless of y, so centering our own icons in this
+     44px-tall row put them measurably lower than the traffic lights —
+     confirmed against a real screenshot, not guessed. flex-start + the
+     controls' own margin-top (below) instead anchors both to
+     approximately the same reference point near the top edge.
+  */
+  align-items: flex-start;
   /* Taller than a strict traffic-light-height minimum on purpose — a thin
      strip reads as a "divider," not a header, and is an easy-to-miss drag
      target; this gives a roomier grab area to go with drag-region="deep"
@@ -149,6 +161,10 @@ body {
 }
 
 .titlebar-controls {
+  /* Best estimate from the screenshot, not a value read from an API --
+     wry never exposes the buttons' actual resolved y position. Nudge
+     this (and reply with a fresh screenshot) if it's still off. */
+  margin-top: 5px;
   display: flex;
   align-items: center;
   gap: 4px;
