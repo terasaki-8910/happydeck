@@ -528,7 +528,18 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     if (!machineId) throw new Error('This session has no recorded machineId to resume it on');
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
-    return machineResumeSession(requireSocket(), encryptor, machineId, sessionId);
+    const result = await machineResumeSession(requireSocket(), encryptor, machineId, sessionId);
+    // Mirrors killSession's optimistic update in reverse — the RPC's own
+    // success already tells us the process is back, but statusOf/
+    // statusClassOf gate the "thinking" ephemeral behind `active`, so
+    // without this the sidebar dot and tile header sit on stale "offline"
+    // until a server-pushed update-session event happens to arrive (slow,
+    // reaper-adjacent — same reason killSession forces its own flag rather
+    // than waiting for one).
+    if (result.type === 'success') {
+      set((state) => ({ sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, active: true } : s)) }));
+    }
+    return result;
   },
 
   async deleteSession(sessionId) {
