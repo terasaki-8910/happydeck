@@ -82,6 +82,8 @@ export function mockSessions(): LiveSession[] {
         titleMsg('m1-0', 1, now - 500000, 'Fix the sidebar collapse animation'),
         textMsg('m1-1', 2, 'user', 'Can you explain what changed in the last refactor? Use a table if it helps.', now - 400000),
         toolCallMsg('m1-2', 3, now - 390000, 'Read', 'Read', { file_path: 'src/App.tsx' }),
+        toolCallMsg('m1-2a', 3.1, now - 385000, 'Bash', 'Bash', { command: 'grep -n Panel src/App.tsx' }),
+        toolCallMsg('m1-2b2', 3.2, now - 380000, 'Edit', 'Edit', { file_path: 'src/App.css' }),
         terminalTextMsg('m1-2b', 4, 'actually also check the sidebar CSS while you\'re in there', now - 350000),
         textMsg(
           'm1-3',

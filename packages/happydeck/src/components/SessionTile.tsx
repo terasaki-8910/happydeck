@@ -72,6 +72,58 @@ function ToolCallLine({ part }: { part: Extract<RenderablePart, { kind: 'tool-ca
   );
 }
 
+type MessageEntry = { message: LiveSession['messages'][number]; part: RenderablePart };
+type MessageSegment = { kind: 'single'; entry: MessageEntry } | { kind: 'tool-group'; entries: MessageEntry[] };
+
+/** A run of 2+ consecutive tool-calls collapses to one summary line ("▸ 3 tool calls · Read, Bash, Write") instead of a still-visible-even-collapsed row each — this is what a tool-call burst actually is, one activity, not several turns to scan past. A lone tool-call stays exactly as ToolCallLine renders it on its own, unwrapped. */
+function groupToolCalls(entries: MessageEntry[]): MessageSegment[] {
+  const segments: MessageSegment[] = [];
+  let run: MessageEntry[] = [];
+  const flushRun = () => {
+    if (run.length === 0) return;
+    segments.push(run.length === 1 ? { kind: 'single', entry: run[0] } : { kind: 'tool-group', entries: run });
+    run = [];
+  };
+  for (const entry of entries) {
+    if (entry.part.kind === 'tool-call') {
+      run.push(entry);
+    } else {
+      flushRun();
+      segments.push({ kind: 'single', entry });
+    }
+  }
+  flushRun();
+  return segments;
+}
+
+function ToolCallGroup({ entries }: { entries: MessageEntry[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const labels = entries.map(({ part }) => (part.kind === 'tool-call' ? part.label : '')).join(', ');
+
+  return (
+    <div className={`tile-message tile-tool-call tile-tool-group ${expanded ? 'tile-tool-call-expanded' : ''}`}>
+      <button
+        type="button"
+        className="tile-tool-call-toggle"
+        onClick={() => setExpanded((v) => !v)}
+        title={expanded ? 'Collapse' : 'Expand'}
+      >
+        <span className="tile-tool-call-caret">{expanded ? '▾' : '▸'}</span>
+        <span className="tile-tool-call-label tile-tool-group-label">
+          {entries.length} tool calls · {labels}
+        </span>
+      </button>
+      {expanded && (
+        <div className="tile-tool-group-items">
+          {entries.map(
+            ({ message, part }) => part.kind === 'tool-call' && <ToolCallLine key={message.id} part={part} />,
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SessionTile({
   session,
   workspaces,
@@ -525,7 +577,15 @@ export function SessionTile({
           </button>
         )}
         {visibleMessages.length === 0 && <p className="tile-empty">{t('noMessages')}</p>}
-        {visibleMessages.map(({ message, part }) => {
+        {groupToolCalls(visibleMessages).map((segment) => {
+          if (segment.kind === 'tool-group') {
+            return (
+              <div key={segment.entries[0].message.id} className="message-row role-agent">
+                <ToolCallGroup entries={segment.entries} />
+              </div>
+            );
+          }
+          const { message, part } = segment.entry;
           const role = messageRole(message.content);
           return (
             <div key={message.id} className={`message-row role-${role}`}>

@@ -1361,13 +1361,6 @@ body {
   gap: 4px;
 }
 
-/* Consecutive tool-call rows (Bash call, Read file, ...) read as an activity
-   log, not a conversation -- the default message-bubble padding between
-   each one left far more air than a one-line "• Bash call" needs. */
-.message-row:has(> .tile-tool-call) + .message-row:has(> .tile-tool-call) {
-  margin-top: -5px;
-}
-
 .tile-empty {
   color: var(--text-faint);
   font-size: 12px;
@@ -1615,6 +1608,27 @@ body {
   margin-top: 2px;
   color: var(--text-faint);
   font-size: 11px;
+}
+
+/* The group summary's own label ("3 tool calls · Read, Bash, Write") is a
+   joined list of however many calls are in the run — truncate to one line
+   instead of wrapping, unlike a single ToolCallLine's own (usually short)
+   label. */
+.tile-tool-group-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-tool-group-items {
+  margin-top: 3px;
+  padding-left: 14px;
+  border-left: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 /* One unified bordered "pill" box holds everything (+ menu, model/permission
