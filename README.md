@@ -76,6 +76,12 @@ Then open it normally. You only need to do this once per downloaded copy.
 (The real fix is enrolling in the Apple Developer Program and code-signing +
 notarizing release builds in CI — not set up yet.)
 
+**Local build instead of a downloaded release**: `pnpm --filter happydeck
+build:install` builds a release `.app`, replaces whatever's at
+`/Applications/happydeck.app`, clears its quarantine flag, and launches it —
+the same fix as above, just applied automatically to a build made on this
+machine instead of one downloaded through a browser.
+
 ## Releasing
 
 Push a tag matching `happydeck-v*` (e.g. `happydeck-v0.1.0`) to trigger
