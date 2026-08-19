@@ -25,6 +25,17 @@ export function sanitizeFileName(name: string): string {
   return cleaned || 'file';
 }
 
+// Human-readable, still sortable, still millisecond-unique (this Mac's own
+// local clock — happydeck computes it client-side, not on whichever remote
+// machine the attachment actually lands on) — a raw Date.now() here read as
+// "the folder name is wrong" when actually inspected on disk, since there's
+// no way to tell at a glance that a 13-digit number is an epoch ms value.
+function formatTimestampForDirName(timestamp: number): string {
+  const d = new Date(timestamp);
+  const pad = (n: number, width = 2) => String(n).padStart(width, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}-${pad(d.getMilliseconds(), 3)}`;
+}
+
 /**
  * Where an attachment lands: `.claude/happy-<timestamp>/<filename>` under
  * the session's own working directory — the user's own explicit choice
@@ -34,7 +45,7 @@ export function sanitizeFileName(name: string): string {
  * collide and nothing needs cleanup/collision handling.
  */
 export function buildAttachmentDir(cwd: string, timestamp: number): string {
-  return joinPath(joinPath(cwd, '.claude'), `happy-${timestamp}`);
+  return joinPath(joinPath(cwd, '.claude'), `happy-${formatTimestampForDirName(timestamp)}`);
 }
 
 export function buildAttachmentPath(attachDir: string, fileName: string): string {
