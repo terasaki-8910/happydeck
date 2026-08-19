@@ -104,16 +104,38 @@ export const SessionMenu = forwardRef<SessionMenuHandle, SessionMenuProps>(funct
   // long sidebar list — clamp the cursor-anchored popover to stay fully
   // within the viewport instead of running off the bottom/right edge.
   useLayoutEffect(() => {
-    if (!open || !cursorPosition || !popoverRef.current) return;
+    if (!open || !popoverRef.current) return;
     const el = popoverRef.current;
+
+    if (cursorPosition) {
+      const rect = el.getBoundingClientRect();
+      const maxLeft = window.innerWidth - rect.width - 8;
+      const maxTop = window.innerHeight - rect.height - 8;
+      el.style.left = `${Math.min(cursorPosition.x, Math.max(8, maxLeft))}px`;
+      el.style.top = `${Math.min(cursorPosition.y, Math.max(8, maxTop))}px`;
+      return;
+    }
+
+    // Reset any earlier overflow correction before re-measuring — otherwise
+    // a leftover inline fixed-position from a wider previous render (e.g.
+    // renaming just turned back off) would make this measurement reflect
+    // that stale override instead of the current natural CSS position.
+    el.style.position = '';
+    el.style.right = '';
+    el.style.left = '';
+    el.style.top = '';
     const rect = el.getBoundingClientRect();
-    const maxLeft = window.innerWidth - rect.width - 8;
-    const maxTop = window.innerHeight - rect.height - 8;
-    const clampedLeft = Math.min(cursorPosition.x, Math.max(8, maxLeft));
-    const clampedTop = Math.min(cursorPosition.y, Math.max(8, maxTop));
-    el.style.left = `${clampedLeft}px`;
-    el.style.top = `${clampedTop}px`;
-  }, [open, cursorPosition]);
+    // The default "⋮"-anchored popover (top:100%; right:4px in CSS) handles
+    // the common case fine on its own — only override when it actually runs
+    // off the left edge, e.g. the rename input widening the popover past
+    // the sidebar's own left edge on a row near the window's left side.
+    if (rect.left < 8) {
+      el.style.position = 'fixed';
+      el.style.right = 'auto';
+      el.style.left = '8px';
+      el.style.top = `${rect.top}px`;
+    }
+  }, [open, cursorPosition, renaming]);
 
   const submitRename = (event: FormEvent) => {
     event.preventDefault();
