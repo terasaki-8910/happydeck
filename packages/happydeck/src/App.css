@@ -161,10 +161,17 @@ body {
 }
 
 .titlebar-controls {
-  /* Best estimate from the screenshot, not a value read from an API --
-     wry never exposes the buttons' actual resolved y position. Nudge
-     this (and reply with a fresh screenshot) if it's still off. */
-  margin-top: 5px;
+  /* Revised estimate: trafficLightPosition's y (in tauri.conf.json) does
+     NOT move the buttons themselves (confirmed from wry's own source,
+     wkwebview/class/wry_web_view_parent.rs — origin.y is never set on
+     the buttons, only the invisible native drag-container's height is).
+     The buttons almost certainly sit at macOS's own default traffic-
+     light inset regardless of our config, commonly cited around ~13px
+     to their center. .sidebar-footer-icon is a 15px icon + 4px padding
+     each side (~23px total); centering that on a 13px target puts its
+     own top edge around 13 - 23/2 ≈ 1.5px. Still an estimate — wry
+     doesn't expose the buttons' actual resolved position to query. */
+  margin-top: 2px;
   display: flex;
   align-items: center;
   gap: 4px;
