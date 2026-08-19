@@ -142,8 +142,9 @@ function SessionRow({ session, collapsed, active }: SessionRowProps) {
       <span className={`status-dot ${statusClassOf(session)}`} title={`status: ${statusClassOf(session).replace('status-', '')}`} />
       {!collapsed && (
         <span className="sidebar-session-label">
-          <span className="sidebar-session-title">
-            {metadata?.host && <span className="sidebar-session-host">{shortHost(metadata.host)}:</span>} {label}
+          <span className="sidebar-session-title-row">
+            <span className="sidebar-session-title">{label}</span>
+            {metadata?.host && <span className="sidebar-session-host">{shortHost(metadata.host)}</span>}
           </span>
           <span className="sidebar-session-status">{statusLine}</span>
         </span>

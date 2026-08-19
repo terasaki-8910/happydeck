@@ -305,13 +305,25 @@ body {
   gap: 1px;
 }
 
+.sidebar-session-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Fixed-width and always visible, regardless of how long the title next to
+   it is — with the title (label/path) leading now, a plain nowrap+ellipsis
+   on the whole row would truncate straight through this before ever
+   reaching it, hiding the device name entirely on any row with a title
+   longer than the row is wide. Sizing this independently and letting only
+   the title's own span shrink keeps it visible on every row. */
 .sidebar-session-host {
-  display: inline-block;
+  flex-shrink: 0;
   max-width: 88px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: bottom;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -319,6 +331,8 @@ body {
 }
 
 .sidebar-session-title {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
