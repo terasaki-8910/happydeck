@@ -945,6 +945,12 @@ body {
   border-color: var(--accent);
 }
 
+/* box-shadow, not border-color -- .tile-solo (panes view) sets border:none,
+   so a border-color-only highlight would be invisible there specifically. */
+.tile-file-drag-over {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .tile-select {
   flex-shrink: 0;
   accent-color: var(--accent);

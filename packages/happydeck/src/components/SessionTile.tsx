@@ -1,4 +1,4 @@
-import { type ClipboardEvent, type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LuLoaderCircle, LuSendHorizontal } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -168,6 +168,7 @@ export function SessionTile({
   const pendingOlderLoadScrollHeightRef = useRef<number | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  const [fileDragOver, setFileDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const status = statusOf(session);
@@ -353,6 +354,32 @@ export function SessionTile({
     if (files.length > 0) runAction(() => attachFiles(files));
   };
 
+  // Dropped straight onto this tile — attaches to THIS session specifically,
+  // not some ambient "currently focused" one, so dragging a file onto a
+  // different pane in a split view targets that pane's own session. The
+  // pane-reorder drag (dragging a sidebar row to split/rearrange panes,
+  // see App.tsx's onPanesDragOver/onPanesDrop) already ignores anything
+  // that isn't its own SESSION_DRAG_MIME type, so this coexists with it
+  // without needing stopPropagation.
+  const handleTileDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setFileDragOver(true);
+  };
+
+  const handleTileDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node)) setFileDragOver(false);
+  };
+
+  const handleTileDrop = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    setFileDragOver(false);
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length > 0) runAction(() => attachFiles(files));
+  };
+
   // Especially valuable for a session on a remote machine — there's no
   // other way to get a screenshot onto that machine's filesystem short of
   // manually copying it over yourself.
@@ -444,7 +471,12 @@ export function SessionTile({
   };
 
   return (
-    <section className={`tile tile-${variant} ${isSelected ? 'tile-selected' : ''}`}>
+    <section
+      className={`tile tile-${variant} ${isSelected ? 'tile-selected' : ''} ${fileDragOver ? 'tile-file-drag-over' : ''}`}
+      onDragOver={handleTileDragOver}
+      onDragLeave={handleTileDragLeave}
+      onDrop={handleTileDrop}
+    >
       <header className="tile-header">
         {variant === 'grid' && (
           <input
