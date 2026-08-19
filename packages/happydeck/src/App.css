@@ -38,17 +38,22 @@
      isn't redefined in the light overrides below. */
   --toggle-knob-on: #0b0b0c;
 
-  /* Official Claude Code permission-mode colors, sourced from happy-app's
-     own theme.ts (theme.colors.permission.*) — not guessed. "plan" is
-     green in the real app, not blue/cyan. "dontAsk" has no official
-     mapping there (it's Claude-specific, absent from the semantic-kind
-     ternary that colors these) — left neutral rather than invented.
-     These are theme.ts's dark-mode values; light-mode values (slightly
-     different, e.g. plan #34C759 vs #32D74B) are set in the light block
-     below, same as every other token here. */
+  /* "plan" keeps the official Happy app's own green (happy-app's theme.ts,
+     theme.colors.permission.plan — not guessed). accept-edits/bypass
+     deliberately DIVERGE from that reference (blue/orange there) — those
+     don't track the actual risk gradient: accept-edits auto-approves
+     edits and common commands without asking (confirmed against Claude
+     Code's own docs), bypass skips every check. Recolored to a severity
+     ramp instead — yellow (caution, still asks for some things) below
+     red (bypass reuses --danger outright: same "this is the dangerous
+     one" semantic already used for kill/delete elsewhere in this app, not
+     a separate invented red). "dontAsk" has no official mapping either
+     way (Claude-specific, absent from happy-app's own semantic-kind
+     ternary) and isn't part of this permissiveness gradient anyway — it
+     auto-DENIES rather than auto-approves — so it stays neutral/unstyled. */
   --permission-plan: #32d74b;
-  --permission-accept-edits: #0a84ff;
-  --permission-bypass: #ff9f0a;
+  --permission-accept-edits: #ffd60a;
+  --permission-bypass: var(--danger);
 
   --font-ui:
     -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -73,8 +78,11 @@
     --danger-border: #f0b8b8;
     --link: #2563eb;
     --permission-plan: #34c759;
-    --permission-accept-edits: #007aff;
-    --permission-bypass: #ff9500;
+    /* #ffd60a fails WCAG as text on white (~1.5:1) — darkened+desaturated
+       to a goldenrod that still reads as "yellow" while passing AA (~4.9:1),
+       same treatment --accent-text already gets for the same reason. */
+    --permission-accept-edits: #8a6d00;
+    --permission-bypass: var(--danger);
   }
 }
 
@@ -92,8 +100,8 @@
   --danger-border: #f0b8b8;
   --link: #2563eb;
   --permission-plan: #34c759;
-  --permission-accept-edits: #007aff;
-  --permission-bypass: #ff9500;
+  --permission-accept-edits: #8a6d00;
+  --permission-bypass: var(--danger);
 }
 
 * {
