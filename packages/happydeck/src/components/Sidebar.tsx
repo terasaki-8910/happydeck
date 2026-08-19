@@ -1,6 +1,6 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { type RefObject, useEffect, useRef } from 'react';
-import { LuPanelLeft, LuPin, LuSearch } from 'react-icons/lu';
+import { LuPin } from 'react-icons/lu';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import happydeckMarkDark from '../assets/happydeck-mark.svg';
 import happydeckMarkLight from '../assets/happydeck-mark-light.svg';
@@ -187,7 +187,6 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
   const t = useT();
   const collapsed = useViewStore((s) => s.sidebarCollapsed);
   const setSettingsOpen = useViewStore((s) => s.setSettingsOpen);
-  const setSearchOpen = useViewStore((s) => s.setSearchOpen);
   const pinnedIds = usePinStore((s) => s.pinnedIds);
   const localMachineId = useHappyStore((s) => s.localMachineId);
   const machines = useHappyStore((s) => s.machines);
@@ -237,14 +236,6 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
       <div className="sidebar-brand">
         <img className="sidebar-brand-mark" src={brandMark} alt="" />
         {!collapsed && <span className="sidebar-brand-name">happydeck</span>}
-        <button
-          type="button"
-          className="sidebar-collapse-toggle"
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          onClick={() => (panelRef.current?.isCollapsed() ? panelRef.current?.expand() : panelRef.current?.collapse())}
-        >
-          <LuPanelLeft size={15} strokeWidth={2} />
-        </button>
       </div>
 
       {!collapsed && (
@@ -289,9 +280,6 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
               {localHost}
             </span>
           )}
-          <button type="button" className="sidebar-footer-icon" title={`${t('search')} (⌘F)`} onClick={() => setSearchOpen(true)}>
-            <LuSearch size={15} strokeWidth={2} />
-          </button>
           <button type="button" className="sidebar-footer-icon" title={`${t('settings')} (⌘,)`} onClick={() => setSettingsOpen(true)}>
             <GearIcon />
           </button>

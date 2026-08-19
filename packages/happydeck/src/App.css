@@ -107,6 +107,11 @@ body,
   margin: 0;
 }
 
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -115,8 +120,25 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.titlebar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding-left: 78px;
+  background: var(--bg-tile);
+  border-bottom: 1px solid var(--border);
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .app-shell {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .app-shell-separator,
@@ -219,15 +241,8 @@ body {
   flex-shrink: 0;
 }
 
-/* At collapsedSize=52px, the mark + toggle side by side overflowed the
-   available width (mark 16px + gap + a ~30px toggle button, against ~28px
-   of padding-adjusted room) -- the toggle was rendering half outside the
-   rail, reading as "swallowed by the border". Stacking them removes the
-   width constraint entirely instead of trying to shrink either further. */
 .sidebar-collapsed .sidebar-brand {
-  flex-direction: column;
   justify-content: center;
-  gap: 4px;
   padding: 10px 6px;
 }
 
@@ -246,20 +261,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.sidebar-collapse-toggle {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--text-faint);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 6px 8px;
-}
-
-.sidebar-collapse-toggle:hover {
-  color: var(--text);
 }
 
 .sidebar-sessions {
@@ -1601,7 +1602,7 @@ body {
 .tile-composer {
   position: relative;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 6px;
   background: var(--bg);
   border: 1px solid var(--border);

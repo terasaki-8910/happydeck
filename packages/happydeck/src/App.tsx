@@ -1,5 +1,6 @@
 import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Panel, type PanelImperativeHandle, Separator } from 'react-resizable-panels';
+import { LuPanelLeft, LuSearch } from 'react-icons/lu';
 import './App.css';
 import { BulkActionBar } from './components/BulkActionBar';
 import { LinkDeviceView } from './components/LinkDeviceView';
@@ -9,7 +10,7 @@ import { SearchModal } from './components/SearchModal';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
 import { SESSION_DRAG_MIME } from './lib/dnd';
-import { MOCK_ENABLED } from './lib/mockData';
+import { useT } from './lib/i18n';
 import { type DropZone, insertAtGap, insertAtOuterEdge, insertAtZone, type OuterEdge, paneTreeSessionIds, zoneFromPointer } from './lib/paneTree';
 import { mostRecentSession } from './lib/sessionOrder';
 import { installZoomHotkeys } from './lib/zoomHotkeys';
@@ -48,6 +49,7 @@ function DropPreviewGhost({ hover }: { hover: PaneHover }) {
 }
 
 function App() {
+  const t = useT();
   const status = useHappyStore((s) => s.status);
   const error = useHappyStore((s) => s.error);
   const sessions = useHappyStore((s) => s.sessions);
@@ -116,13 +118,7 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [toggleSettings, toggleSearch]);
 
-  // Skipped in mock mode — getCurrentWebview() needs the real Tauri
-  // runtime, which a plain browser tab (used for UI-only mock testing)
-  // doesn't have.
-  useEffect(() => {
-    if (MOCK_ENABLED) return;
-    return installZoomHotkeys();
-  }, []);
+  useEffect(() => installZoomHotkeys(), []);
 
   // Land on the most-recently-active session's panes view by default, once —
   // this never runs again after the user (or a tab click) picks a view.
@@ -278,6 +274,21 @@ function App() {
 
   return (
     <>
+      <div className="titlebar" data-tauri-drag-region>
+        <div className="titlebar-controls">
+          <button
+            type="button"
+            className="sidebar-footer-icon"
+            title={sidebarCollapsed ? t('expandSidebar') : t('collapseSidebar')}
+            onClick={() => (sidebarPanelRef.current?.isCollapsed() ? sidebarPanelRef.current?.expand() : sidebarPanelRef.current?.collapse())}
+          >
+            <LuPanelLeft size={15} strokeWidth={2} />
+          </button>
+          <button type="button" className="sidebar-footer-icon" title={`${t('search')} (⌘F)`} onClick={() => setSearchOpen(true)}>
+            <LuSearch size={15} strokeWidth={2} />
+          </button>
+        </div>
+      </div>
       <Group orientation="horizontal" className="app-shell">
         <Panel
           id="sidebar"
