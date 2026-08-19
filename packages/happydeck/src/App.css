@@ -1772,6 +1772,15 @@ body {
 }
 
 .tile-composer-input {
+  /* textarea is inline-block by default — inside a plain (non-flex) block
+     wrapper like .tile-composer-input-wrap, that reserves phantom
+     descender space below it (the classic "gap under an inline-block/img"
+     CSS gotcha), making the wrapper measurably taller than the textarea
+     itself. Confirmed live: wrap was 36px against the textarea's own
+     33px, all 3px sitting below it — which pulled the visible text
+     ~1.5px above true vertical center relative to the badges/send button
+     next to it, despite .tile-composer's own align-items: center. */
+  display: block;
   flex: 1;
   width: 100%;
   background: transparent;
