@@ -299,9 +299,9 @@ export const SessionMenu = forwardRef<SessionMenuHandle, SessionMenuProps>(funct
 
       {confirmingKill && (
         <ConfirmDialog
-          title="Kill this session?"
-          body={`This immediately terminates the CLI process on the machine it's running on — not an interrupt, the process is gone. Cannot be undone.\n\n${title}`}
-          confirmLabel="kill process"
+          title={t('killConfirmTitle')}
+          body={`${t('killConfirmBody')}\n\n${title}`}
+          confirmLabel={t('killProcess')}
           danger
           onConfirm={() => {
             setConfirmingKill(false);
@@ -313,9 +313,9 @@ export const SessionMenu = forwardRef<SessionMenuHandle, SessionMenuProps>(funct
 
       {confirmingDelete && (
         <ConfirmDialog
-          title="Delete this session?"
-          body={`Permanently removes it from the account on every device — not the same as kill (which only stops the process). Cannot be undone.\n\n${title}`}
-          confirmLabel="delete"
+          title={t('deleteConfirmTitle')}
+          body={`${t('deleteConfirmBody')}\n\n${title}`}
+          confirmLabel={t('delete')}
           danger
           onConfirm={() => {
             setConfirmingDelete(false);

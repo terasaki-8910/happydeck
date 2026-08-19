@@ -15,6 +15,7 @@ export function SpawnPanel() {
   const defaultPermissionMode = useSettingsStore((s) => s.defaultPermissionMode);
   const defaultModelMode = useSettingsStore((s) => s.defaultModelMode);
   const defaultEffortLevel = useSettingsStore((s) => s.defaultEffortLevel);
+  const language = useSettingsStore((s) => s.language);
   const lastSpawnMachineId = useSettingsStore((s) => s.lastSpawnMachineId);
   const lastSpawnDirectoryByMachine = useSettingsStore((s) => s.lastSpawnDirectoryByMachine);
   const setLastSpawnLocation = useSettingsStore((s) => s.setLastSpawnLocation);
@@ -59,7 +60,7 @@ export function SpawnPanel() {
         effortLevel: defaultEffortLevel,
       });
       if (!result) {
-        setError('No response from the machine (RPC returned nothing decryptable)');
+        setError(t('spawnNoResponse'));
       } else if (result.type === 'success') {
         setLastSpawnLocation(machineId, directory.trim());
         setOpen(false);
@@ -70,9 +71,13 @@ export function SpawnPanel() {
         focusSession(result.sessionId);
       } else if (result.type === 'requestToApproveDirectoryCreation') {
         setNeedsApproval(true);
-        setError(`"${result.directory}" doesn't exist yet — submit again to create it`);
+        setError(
+          language === 'ja'
+            ? `「${result.directory}」はまだ存在しません — もう一度送信すると作成します`
+            : `"${result.directory}" doesn't exist yet — submit again to create it`,
+        );
       } else if (result.type === 'pending') {
-        setError(`Still starting — retry in ${result.retryAfterMs}ms`);
+        setError(language === 'ja' ? `まだ起動中です — ${result.retryAfterMs}ms後に再試行してください` : `Still starting — retry in ${result.retryAfterMs}ms`);
       } else {
         setError(result.errorMessage);
       }
@@ -113,7 +118,7 @@ export function SpawnPanel() {
         }}
       >
         <option value="" disabled>
-          machine…
+          {t('spawnMachinePlaceholder')}
         </option>
         {onlineMachines.map((machine) => {
           const host = (machine.metadata as { host?: string } | null)?.host ?? machine.id;
@@ -128,18 +133,18 @@ export function SpawnPanel() {
         <input
           className="spawn-directory"
           value={directory}
-          placeholder="/path/to/project"
+          placeholder={t('spawnDirectoryPlaceholder')}
           onChange={(event) => {
             setDirectory(event.target.value);
             setNeedsApproval(false);
           }}
         />
-        <button type="button" disabled={!machineId} title="Browse this machine's filesystem" onClick={() => setBrowsing(true)}>
-          browse…
+        <button type="button" disabled={!machineId} title={t('spawnBrowseTitle')} onClick={() => setBrowsing(true)}>
+          {t('spawnBrowse')}
         </button>
       </div>
       <button type="submit" className="spawn-start" disabled={busy || !machineId || !directory.trim()}>
-        {needsApproval ? 'create + start' : 'start'}
+        {needsApproval ? t('spawnCreateAndStart') : t('spawnStart')}
       </button>
       <button
         type="button"
@@ -151,7 +156,7 @@ export function SpawnPanel() {
           setNeedsApproval(false);
         }}
       >
-        cancel
+        {t('cancel')}
       </button>
       {error && <span className="spawn-error">{error}</span>}
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DirectoryEntry } from 'happy-client';
+import { useT } from '../lib/i18n';
 import { joinPath, parentPath } from '../lib/paths';
 import { useHappyStore } from '../store/happyStore';
 
@@ -19,6 +20,7 @@ interface DirectoryBrowserProps {
  * session without having to already know the remote layout.
  */
 export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onCancel }: DirectoryBrowserProps) {
+  const t = useT();
   const listMachineDirectory = useHappyStore((s) => s.listMachineDirectory);
   const createMachineDirectory = useHappyStore((s) => s.createMachineDirectory);
   const [path, setPath] = useState(startPath);
@@ -82,7 +84,7 @@ export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onC
     <div className="confirm-backdrop" onClick={onCancel}>
       <div className="browser-dialog" onClick={(event) => event.stopPropagation()}>
         <div className="browser-path-row">
-          <button type="button" className="browser-up" title="Up one level" onClick={() => setPath(parentPath(path))}>
+          <button type="button" className="browser-up" title={t('browserUpOneLevel')} onClick={() => setPath(parentPath(path))}>
             ↑
           </button>
           <input
@@ -93,8 +95,8 @@ export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onC
               if (event.key === 'Enter') setPath(path);
             }}
           />
-          <button type="button" className="browser-new-folder" title="New folder" onClick={() => setCreatingFolder(true)}>
-            + new folder
+          <button type="button" className="browser-new-folder" title={t('browserNewFolder')} onClick={() => setCreatingFolder(true)}>
+            {t('browserNewFolderButton')}
           </button>
         </div>
 
@@ -108,7 +110,7 @@ export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onC
               autoFocus
               className="browser-path-input"
               value={newFolderName}
-              placeholder="folder name"
+              placeholder={t('browserFolderNamePlaceholder')}
               disabled={creatingBusy}
               onChange={(event) => setNewFolderName(event.target.value)}
               onKeyDown={(event) => {
@@ -119,18 +121,18 @@ export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onC
               }}
             />
             <button type="button" className="browser-new-folder-create" disabled={creatingBusy || !newFolderName.trim()} onClick={submitNewFolder}>
-              create
+              {t('browserCreate')}
             </button>
             <button type="button" onClick={() => setCreatingFolder(false)}>
-              cancel
+              {t('cancel')}
             </button>
           </div>
         )}
 
         <div className="browser-entries">
-          {loading && <p className="app-message">loading…</p>}
+          {loading && <p className="app-message">{t('browserLoading')}</p>}
           {error && <p className="app-message app-message-error">{error}</p>}
-          {!loading && !error && entries?.length === 0 && <p className="app-message">(no subdirectories)</p>}
+          {!loading && !error && entries?.length === 0 && <p className="app-message">{t('browserNoSubdirectories')}</p>}
           {!loading &&
             entries?.map((entry) => (
               <button key={entry.name} type="button" className="browser-entry" onClick={() => setPath(joinPath(path, entry.name))}>
@@ -144,10 +146,10 @@ export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onC
 
         <div className="confirm-actions">
           <button type="button" className="confirm-cancel" onClick={onCancel}>
-            cancel
+            {t('cancel')}
           </button>
           <button type="button" className="confirm-ok" onClick={() => onSelect(path)}>
-            select this folder
+            {t('browserSelectFolder')}
           </button>
         </div>
       </div>

@@ -124,9 +124,9 @@ export function TileActionsMenu({ title, busy, onAbort, onResume, onDownload, on
 
       {confirmingKill && (
         <ConfirmDialog
-          title="Kill this session?"
-          body={`This immediately terminates the CLI process on the machine it's running on — not an interrupt, the process is gone. Cannot be undone.\n\n${title}`}
-          confirmLabel="kill process"
+          title={t('killConfirmTitle')}
+          body={`${t('killConfirmBody')}\n\n${title}`}
+          confirmLabel={t('killProcess')}
           danger
           onConfirm={() => {
             setConfirmingKill(false);

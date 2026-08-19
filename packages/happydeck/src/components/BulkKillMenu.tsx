@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { LuSkull } from 'react-icons/lu';
 import { useT } from '../lib/i18n';
 import { type AgentState, type LiveSession, useHappyStore } from '../store/happyStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -12,6 +13,7 @@ function isIdle(session: LiveSession): boolean {
 }
 
 interface KillTarget {
+  /** Already-localized — "all running sessions" / "ホスト名のセッション" / etc, built at pick-time so this doesn't need its own translation lookup at render time. */
   description: string;
   sessions: LiveSession[];
 }
@@ -25,6 +27,7 @@ interface KillTarget {
  */
 export function BulkKillMenu() {
   const t = useT();
+  const language = useSettingsStore((s) => s.language);
   const sessions = useHappyStore((s) => s.sessions);
   const machines = useHappyStore((s) => s.machines);
   const killSession = useHappyStore((s) => s.killSession);
@@ -80,12 +83,28 @@ export function BulkKillMenu() {
     }))
     .filter((entry) => entry.sessions.length > 0);
 
+  // Machine/workspace names are user data, not translatable — the
+  // surrounding phrase is language-conditional the same way
+  // explainResumeError builds its own full sentences, rather than forcing
+  // this through the flat single-string t() dictionary.
+  const forMachine = (host: string) => (language === 'ja' ? `${host}のセッション` : `sessions on ${host}`);
+  const forWorkspace = (name: string) => (language === 'ja' ? `ワークスペース「${name}」のセッション` : `sessions in ${name}`);
+
   const runKill = async (sessionsToKill: LiveSession[]) => {
     setTarget(null);
     setBusy(true);
     const outcomes = await Promise.allSettled(sessionsToKill.map((s) => killSession(s.id)));
     const failed = outcomes.filter((o) => o.status === 'rejected').length;
-    setResult(failed === 0 ? `killed ${outcomes.length}` : `killed ${outcomes.length - failed}, ${failed} failed`);
+    const ok = outcomes.length - failed;
+    setResult(
+      failed === 0
+        ? language === 'ja'
+          ? `${outcomes.length}件を終了しました`
+          : `killed ${outcomes.length}`
+        : language === 'ja'
+          ? `${ok}件を終了、${failed}件失敗`
+          : `killed ${ok}, ${failed} failed`,
+    );
     setBusy(false);
   };
 
@@ -110,10 +129,10 @@ export function BulkKillMenu() {
 
       {open && (
         <div className="session-menu-popover action-menu-popover bulk-kill-popover">
-          <button type="button" disabled={activeSessions.length === 0} onClick={() => pick('all running sessions', activeSessions)}>
+          <button type="button" disabled={activeSessions.length === 0} onClick={() => pick(t('bulkKillTargetAll'), activeSessions)}>
             {t('killAllSessions')} ({activeSessions.length})
           </button>
-          <button type="button" disabled={idleSessions.length === 0} onClick={() => pick('idle sessions', idleSessions)}>
+          <button type="button" disabled={idleSessions.length === 0} onClick={() => pick(t('bulkKillTargetIdle'), idleSessions)}>
             {t('killIdleSessions')} ({idleSessions.length})
           </button>
 
@@ -122,7 +141,7 @@ export function BulkKillMenu() {
               <div className="session-menu-divider" />
               <span className="session-menu-label">{t('killByMachine')}</span>
               {machineTargets.map((entry) => (
-                <button type="button" key={entry.key} onClick={() => pick(`sessions on ${entry.label}`, entry.sessions)}>
+                <button type="button" key={entry.key} onClick={() => pick(forMachine(entry.label), entry.sessions)}>
                   {entry.label} ({entry.sessions.length})
                 </button>
               ))}
@@ -134,7 +153,7 @@ export function BulkKillMenu() {
               <div className="session-menu-divider" />
               <span className="session-menu-label">{t('killByWorkspace')}</span>
               {workspaceTargets.map((entry) => (
-                <button type="button" key={entry.key} onClick={() => pick(`sessions in ${entry.label}`, entry.sessions)}>
+                <button type="button" key={entry.key} onClick={() => pick(forWorkspace(entry.label), entry.sessions)}>
                   {entry.label} ({entry.sessions.length})
                 </button>
               ))}
@@ -145,9 +164,17 @@ export function BulkKillMenu() {
 
       {target && (
         <ConfirmDialog
-          title={`Kill ${target.sessions.length} session${target.sessions.length === 1 ? '' : 's'}?`}
-          body={`This immediately terminates the CLI process for ${target.description} (${target.sessions.length} total) on whichever machine each is running on. Cannot be undone.`}
-          confirmLabel={`kill ${target.sessions.length}`}
+          title={
+            language === 'ja'
+              ? `${target.sessions.length}件のセッションを終了しますか？`
+              : `Kill ${target.sessions.length} session${target.sessions.length === 1 ? '' : 's'}?`
+          }
+          body={
+            language === 'ja'
+              ? `対象: ${target.description}（${target.sessions.length}件）。${t('bulkKillConfirmBody')}`
+              : `${t('bulkKillConfirmBody')} Target: ${target.description} (${target.sessions.length} total).`
+          }
+          confirmLabel={language === 'ja' ? `${target.sessions.length}件を終了` : `kill ${target.sessions.length}`}
           danger
           onConfirm={() => runKill(target.sessions)}
           onCancel={() => setTarget(null)}
