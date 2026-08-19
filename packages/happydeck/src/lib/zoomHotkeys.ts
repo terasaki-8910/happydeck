@@ -18,12 +18,14 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
  *
  * Mirrors Tauri's own step size (0.2) and bounds (0.2..10) for parity.
  *
- * Default zoom is 1.2 (one step above the webview's native 1.0), not 1 —
- * applied explicitly here on install, since just changing this starting
- * value wouldn't touch the actual rendered zoom on its own (nothing else
- * calls setZoom until the user's first Cmd+=/Cmd+-/scroll).
+ * Default zoom is 1.1, not the webview's native 1.0 — applied explicitly
+ * here on install, since just changing this starting value wouldn't touch
+ * the actual rendered zoom on its own (nothing else calls setZoom until
+ * the user's first Cmd+=/Cmd+-/scroll). Deliberately NOT a full 0.2 step
+ * (1.2) — confirmed too large a jump; 1.1 is a half-step, off the normal
+ * Cmd+= increment grid on purpose.
  */
-const DEFAULT_ZOOM = 1.2;
+const DEFAULT_ZOOM = 1.1;
 
 export function installZoomHotkeys(): () => void {
   const isMac = navigator.platform.toLowerCase().includes('mac');

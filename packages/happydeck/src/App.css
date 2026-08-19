@@ -314,7 +314,7 @@ body {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 
 .sidebar-session-title {
@@ -329,13 +329,19 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-faint);
+  /* --text-faint measures ~2.5:1 in light mode — fails WCAG entirely even
+     for large text. This line is genuinely-read content (the agent's own
+     latest reply, at a glance), not decorative hint text, so it shouldn't
+     use the deliberately-subtle "faint" token at all. --text-dim (~4.9:1)
+     stays visually secondary to the bold title above it while actually
+     being readable. */
+  color: var(--text-dim);
 }
 
 .sidebar-empty {
   padding: 8px;
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 
 .sidebar-footer {
@@ -354,7 +360,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 10.5px;
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 
 .sidebar-footer-icon {
