@@ -76,6 +76,14 @@ interface SettingsState {
   // the user already has to their other machines over Tailscale. Keyed by
   // Happy machineId, not host, so it survives a machine's host/IP changing.
   sshTargets: Record<string, string>;
+  // "New session" panel defaults — the last machine/directory actually used,
+  // so starting another session on the same project doesn't mean re-picking
+  // both every time. Directory is kept per-machine (a path from one machine
+  // is meaningless on another); the machine id alone has no such per-machine
+  // split. Null until the first successful spawn — SpawnPanel falls back to
+  // the local machine itself in that case.
+  lastSpawnMachineId: string | null;
+  lastSpawnDirectoryByMachine: Record<string, string>;
   setTheme: (theme: Theme) => void;
   setFont: (font: FontChoice) => void;
   setLanguage: (language: Language) => void;
@@ -84,6 +92,7 @@ interface SettingsState {
   setDefaultAgentOptions: (opts: { permissionMode?: string; modelMode?: string; effortLevel?: string }) => void;
   setNotifyPref: (key: keyof NotificationPrefs, value: boolean) => void;
   setSshTarget: (machineId: string, target: string) => void;
+  setLastSpawnLocation: (machineId: string, directory: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -99,6 +108,8 @@ export const useSettingsStore = create<SettingsState>()(
       defaultEffortLevel: 'medium',
       notify: { done: true, permission: true, question: true },
       sshTargets: {},
+      lastSpawnMachineId: null,
+      lastSpawnDirectoryByMachine: {},
       setTheme: (theme) => set({ theme }),
       setFont: (font) => set({ font }),
       setLanguage: (language) => set({ language }),
@@ -118,6 +129,11 @@ export const useSettingsStore = create<SettingsState>()(
           else delete sshTargets[machineId];
           return { sshTargets };
         }),
+      setLastSpawnLocation: (machineId, directory) =>
+        set((state) => ({
+          lastSpawnMachineId: machineId,
+          lastSpawnDirectoryByMachine: { ...state.lastSpawnDirectoryByMachine, [machineId]: directory },
+        })),
     }),
     { name: 'happydeck-settings' },
   ),

@@ -10,10 +10,14 @@ export function SpawnPanel() {
   const t = useT();
   const machines = useHappyStore((s) => s.machines);
   const spawnSession = useHappyStore((s) => s.spawnSession);
+  const localMachineId = useHappyStore((s) => s.localMachineId);
   const focusSession = useViewStore((s) => s.focusSession);
   const defaultPermissionMode = useSettingsStore((s) => s.defaultPermissionMode);
   const defaultModelMode = useSettingsStore((s) => s.defaultModelMode);
   const defaultEffortLevel = useSettingsStore((s) => s.defaultEffortLevel);
+  const lastSpawnMachineId = useSettingsStore((s) => s.lastSpawnMachineId);
+  const lastSpawnDirectoryByMachine = useSettingsStore((s) => s.lastSpawnDirectoryByMachine);
+  const setLastSpawnLocation = useSettingsStore((s) => s.setLastSpawnLocation);
 
   const [open, setOpen] = useState(false);
   const [machineId, setMachineId] = useState('');
@@ -26,6 +30,17 @@ export function SpawnPanel() {
   const onlineMachines = machines.filter((m) => m.active);
   const selectedMachine = onlineMachines.find((m) => m.id === machineId);
   const selectedMachineHome = (selectedMachine?.metadata as { homeDir?: string } | null)?.homeDir;
+
+  // Prefer the machine/directory used last time (so starting another
+  // session on the same project doesn't mean re-picking both every time);
+  // fall back to this machine itself the very first time, before anything's
+  // ever been recorded. Directory is looked up per-machine — a path from a
+  // different machine is meaningless once a different one is selected.
+  const defaultMachineId = (): string => {
+    if (lastSpawnMachineId && onlineMachines.some((m) => m.id === lastSpawnMachineId)) return lastSpawnMachineId;
+    if (localMachineId && onlineMachines.some((m) => m.id === localMachineId)) return localMachineId;
+    return '';
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -46,6 +61,7 @@ export function SpawnPanel() {
       if (!result) {
         setError('No response from the machine (RPC returned nothing decryptable)');
       } else if (result.type === 'success') {
+        setLastSpawnLocation(machineId, directory.trim());
         setOpen(false);
         setDirectory('');
         setNeedsApproval(false);
@@ -69,7 +85,16 @@ export function SpawnPanel() {
 
   if (!open) {
     return (
-      <button type="button" className="spawn-toggle" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className="spawn-toggle"
+        onClick={() => {
+          const machine = defaultMachineId();
+          setMachineId(machine);
+          setDirectory(machine ? (lastSpawnDirectoryByMachine[machine] ?? '') : '');
+          setOpen(true);
+        }}
+      >
         <LuPlus size={13} strokeWidth={2.5} />
         {t('newSession')}
       </button>
@@ -81,7 +106,9 @@ export function SpawnPanel() {
       <select
         value={machineId}
         onChange={(event) => {
-          setMachineId(event.target.value);
+          const nextMachineId = event.target.value;
+          setMachineId(nextMachineId);
+          setDirectory(lastSpawnDirectoryByMachine[nextMachineId] ?? '');
           setNeedsApproval(false);
         }}
       >
