@@ -1507,11 +1507,6 @@ body {
   padding-right: 0;
 }
 
-.tile-message-code {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-}
-
 /* --- Markdown (agent/user prose) --- */
 
 .tile-message-markdown {
@@ -1713,6 +1708,167 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* --- Attachments: session-protocol file events (happy-wire's
+   sessionFileEventSchema), previewable/downloadable in-app instead of a
+   plain "[file] name" text line. Background/border come from the ambient
+   .role-user .tile-message bubble treatment (these events are always
+   user-role) — these rules only handle attachment-specific layout. --- */
+
+.tile-attachment-image {
+  padding: 4px;
+  max-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tile-attachment-thumb-trigger {
+  display: block;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.tile-attachment-thumb {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+}
+
+.tile-attachment-loading,
+.tile-attachment-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.tile-attachment-error button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.tile-attachment-error button:hover {
+  color: var(--text);
+}
+
+.tile-attachment-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 0 2px;
+}
+
+.tile-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.tile-attachment-size {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.tile-attachment-download {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+}
+
+.tile-attachment-download:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.tile-attachment-download:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tile-attachment-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+}
+
+.tile-attachment-file-icon {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.tile-attachment-file .tile-attachment-name {
+  color: var(--text);
+}
+
+.attachment-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.attachment-lightbox-image {
+  max-width: 90vw;
+  max-height: 90vh;
+  cursor: default;
+  border-radius: 4px;
+}
+
+.attachment-lightbox-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+}
+
+.attachment-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* One unified bordered "pill" box holds everything (+ menu, model/permission

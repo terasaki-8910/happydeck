@@ -19,6 +19,8 @@ import {
   type SpawnSessionResult,
   type WriteFileResult,
   decodeBase64,
+  decryptBlobBytes,
+  downloadAttachmentBytes,
   fetchLatestMessages,
   fetchMachines,
   fetchOlderMessages,
@@ -50,6 +52,14 @@ import { ensureNotificationPermission, notify } from '../lib/notifications';
 import { explainResumeError } from '../lib/resumeError';
 import { getLocalMachineId, getStoredCredentials } from '../lib/tauri';
 import { useSettingsStore } from './settingsStore';
+
+// A real network+decrypt round trip has nothing to mock against in
+// VITE_HAPPYDECK_MOCK — a minimal valid 1x1 PNG so the preview/download UI
+// itself is still exercisable there. Not a fixture that means anything.
+const MOCK_ATTACHMENT_PNG = decodeBase64(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+);
 
 const SESSION_EVENT_TITLES: Record<string, string> = {
   done: 'Session finished',
@@ -104,6 +114,8 @@ interface HappyStoreState {
   readMachineFile: (machineId: string, path: string) => Promise<ReadFileResult>;
   writeMachineFile: (machineId: string, path: string, content: string) => Promise<WriteFileResult>;
   writeMachineBinaryFile: (machineId: string, path: string, bytes: Uint8Array) => Promise<WriteFileResult>;
+  /** Fetches and decrypts a session-protocol file event's attachment blob (Happy's own upload protocol, not this app's own [Attached file: path] convention). */
+  downloadAttachment: (sessionId: string, ref: string) => Promise<Uint8Array>;
 }
 
 function getAppState(): 'active' | 'background' {
@@ -123,6 +135,9 @@ let machineEncryptors = new Map<string, Encryptor & Decryptor>();
 let relay: RelaySocket | null = null;
 let http: HttpClient | null = null;
 let secret: Uint8Array | null = null;
+// Was local to bootstrap() — promoted so downloadAttachment (a later action,
+// not part of bootstrap's own closure) can derive a session's blob key.
+let encryption: Encryption | null = null;
 
 // Cooldown for sendMessage's auto-resume — a live-update announcing the
 // resumed process is active can take a few seconds to arrive, and sending
@@ -178,7 +193,11 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
       }
 
       secret = decodeBase64(credentials.secret, 'base64url');
-      const encryption = await Encryption.create(secret);
+      encryption = await Encryption.create(secret);
+      // TS can't narrow a mutable outer-scope `let` across the rest of this
+      // async function (another call could reassign it, in principle) --
+      // this const alias is what actually gets narrowed/used below.
+      const enc = encryption;
 
       let currentToken = credentials.token;
       http = new HttpClient(() => currentToken);
@@ -199,12 +218,12 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
       // just this one's, so it's no longer used to filter here.
       const localMachineId = await getLocalMachineId();
       const [allSessions, allMachines] = await Promise.all([
-        withTokenRefresh(() => fetchSessions(http!, encryption)),
-        withTokenRefresh(() => fetchMachines(http!, encryption)),
+        withTokenRefresh(() => fetchSessions(http!, enc)),
+        withTokenRefresh(() => fetchMachines(http!, enc)),
       ]);
 
-      sessionEncryptors = new Map(allSessions.map((s) => [s.id, encryption.openEncryption(s.dataKey)]));
-      machineEncryptors = new Map(allMachines.map((m) => [m.id, encryption.openEncryption(m.dataKey)]));
+      sessionEncryptors = new Map(allSessions.map((s) => [s.id, enc.openEncryption(s.dataKey)]));
+      machineEncryptors = new Map(allMachines.map((m) => [m.id, enc.openEncryption(m.dataKey)]));
 
       // Promise.all here would let ONE slow/failed session's message fetch
       // reject the whole bootstrap — confirmed live: with enough sessions,
@@ -293,10 +312,10 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
             if (!newSessionId) return;
             // No single-session GET exists — refetch the list and pick out
             // the new row. Rare event, so the extra round-trip is fine.
-            withTokenRefresh(() => fetchSessions(http!, encryption)).then(async (refreshedSessions) => {
+            withTokenRefresh(() => fetchSessions(http!, enc)).then(async (refreshedSessions) => {
               const found = refreshedSessions.find((s) => s.id === newSessionId);
               if (!found) return;
-              sessionEncryptors.set(found.id, encryption.openEncryption(found.dataKey));
+              sessionEncryptors.set(found.id, enc.openEncryption(found.dataKey));
               const encryptor = sessionEncryptors.get(found.id)!;
               const page = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, found.id));
               set((state) =>
@@ -593,5 +612,17 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
     const socket = requireSocket();
     return withDisconnectRetry(socket, () => machineWriteBinaryFile(socket, machineId, encryptor, path, bytes));
+  },
+
+  async downloadAttachment(sessionId, ref) {
+    if (MOCK_ENABLED) return MOCK_ATTACHMENT_PNG;
+    if (!encryption) throw new Error('Not connected');
+    const session = get().sessions.find((s) => s.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    const encryptedBytes = await downloadAttachmentBytes(requireHttp(), sessionId, ref);
+    const blobKey = encryption.getBlobKey(session.dataKey);
+    const decrypted = await decryptBlobBytes(encryptedBytes, blobKey);
+    if (!decrypted) throw new Error('Failed to decrypt attachment (wrong key or corrupted blob)');
+    return decrypted;
   },
 }));

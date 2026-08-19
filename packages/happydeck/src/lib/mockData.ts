@@ -30,6 +30,16 @@ function terminalTextMsg(id: string, seq: number, text: string, createdAt: numbe
   };
 }
 
+/** A session-protocol file event (happy-wire's sessionFileEventSchema) — an image pasted into the terminal, uploaded via Happy's own blob protocol. `ref` doesn't need to resolve to anything real: downloadAttachment's mock branch ignores it and returns a fixed placeholder PNG. */
+function fileMsg(id: string, seq: number, createdAt: number, name: string, size: number, mimeType: string) {
+  return {
+    id,
+    seq,
+    createdAt,
+    content: { role: 'session', content: { role: 'user', ev: { t: 'file', ref: `mock-ref-${id}`, name, size, mimeType } } },
+  };
+}
+
 function toolCallMsg(id: string, seq: number, createdAt: number, name: string, title: string, args: Record<string, unknown>) {
   return {
     id,
@@ -85,6 +95,8 @@ export function mockSessions(): LiveSession[] {
         toolCallMsg('m1-2a', 3.1, now - 385000, 'Bash', 'Bash', { command: 'grep -n Panel src/App.tsx' }),
         toolCallMsg('m1-2b2', 3.2, now - 380000, 'Edit', 'Edit', { file_path: 'src/App.css' }),
         terminalTextMsg('m1-2b', 4, 'actually also check the sidebar CSS while you\'re in there', now - 350000),
+        fileMsg('m1-2c', 4.1, now - 340000, 'screenshot-2026-08-19.png', 284672, 'image/png'),
+        fileMsg('m1-2d', 4.2, now - 335000, 'notes.pdf', 1048576, 'application/pdf'),
         textMsg(
           'm1-3',
           5,

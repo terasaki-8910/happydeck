@@ -18,6 +18,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import type { Workspace } from '../store/workspaceStore';
 import { AgentSettingsCaption, AgentSettingsPopover } from './AgentSettingsPopover';
 import { AskUserQuestionCard, type AskUserQuestionQuestion } from './AskUserQuestionCard';
+import { AttachmentFile } from './AttachmentFile';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { SlashCommandAutocomplete } from './SlashCommandAutocomplete';
 import { TileActionsMenu } from './TileActionsMenu';
@@ -628,7 +629,7 @@ export function SessionTile({
               ) : part.kind === 'tool-call' ? (
                 <ToolCallLine part={part} />
               ) : part.kind === 'file' ? (
-                <p className="tile-message tile-message-code">[file] {part.name}</p>
+                <AttachmentFile sessionId={session.id} name={part.name} ref={part.ref} size={part.size} mimeType={part.mimeType} />
               ) : (
                 <p className="tile-message">{part.text}</p>
               )}

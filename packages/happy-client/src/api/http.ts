@@ -101,4 +101,32 @@ export class HttpClient {
     const text = await safeText(response);
     return (text ? JSON.parse(text) : undefined) as T;
   }
+
+  /**
+   * Fetches raw bytes from an already-ABSOLUTE url (not a relative path
+   * under this server, unlike get/post/delete above) — for attachment
+   * downloads, whose request-download step hands back a full URL that's
+   * either this same server (local storage mode, auth required) or a
+   * presigned S3 GET url (no extra headers — an unexpected Authorization
+   * header can break S3's own signature check). Mirrors happy-cli's own
+   * downloadAttachment: only attach the bearer token when the url starts
+   * with our own server's base.
+   */
+  async getBytesFromUrl(url: string): Promise<Uint8Array> {
+    const sameServer = url.startsWith(getServerUrl());
+    const headers: Record<string, string> = sameServer ? { Authorization: `Bearer ${this.getToken()}` } : {};
+    let response: Response;
+    try {
+      response = await fetch(url, { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    } catch (error) {
+      if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+        throw new HttpTimeoutError(url);
+      }
+      throw error;
+    }
+    if (!response.ok) {
+      throw new HttpError(response.status, await safeText(response));
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  }
 }

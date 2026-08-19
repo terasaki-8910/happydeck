@@ -31,7 +31,14 @@ const HIDDEN_TOOL_NAMES = new Set(['mcp__happy__change_title']);
 export type RenderablePart =
   | { kind: 'text'; text: string }
   | { kind: 'tool-call'; label: string; detail: string | null; description: string | null }
-  | { kind: 'file'; name: string }
+  | {
+      kind: 'file';
+      name: string;
+      /** Session-protocol file events only (happy-wire's sessionFileEventSchema) — a pasted-into-the-terminal image uploaded via Happy's own blob protocol. null for anything else (e.g. a plain-text "[file]" reference with no attachment metadata at all) — preview/download needs ref to fetch the blob. */
+      ref: string | null;
+      size: number | null;
+      mimeType: string | null;
+    }
   | { kind: 'raw'; text: string };
 
 function toolCallDetail(name: string, args: Record<string, unknown>): string | null {
@@ -99,7 +106,13 @@ export function renderablePart(content: unknown): RenderablePart | null {
       return { kind: 'raw', text: ev.text };
     }
     if (ev?.t === 'file' && typeof ev.name === 'string') {
-      return { kind: 'file', name: ev.name };
+      return {
+        kind: 'file',
+        name: ev.name,
+        ref: typeof ev.ref === 'string' ? ev.ref : null,
+        size: typeof ev.size === 'number' ? ev.size : null,
+        mimeType: typeof ev.mimeType === 'string' ? ev.mimeType : null,
+      };
     }
     if (ev?.t === 'tool-call-start') {
       if (typeof ev.name === 'string' && HIDDEN_TOOL_NAMES.has(ev.name)) return null;
