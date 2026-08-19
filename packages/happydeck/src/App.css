@@ -1604,6 +1604,12 @@ body {
   white-space: normal;
   padding-top: 1px;
   padding-bottom: 1px;
+  /* Inherited from .tile-message's 1.55 otherwise — proportionate for
+     12.5px chat text, but at this row's much smaller 11px font that ratio
+     still reads as a visibly wide gap in absolute pixels. Tighter here,
+     for the toggle label and the expanded detail/description alike
+     (nothing under this sets its own line-height, so it cascades). */
+  line-height: 1.3;
 }
 
 .tile-tool-call-toggle {
@@ -1614,6 +1620,11 @@ body {
   border: none;
   color: var(--text-faint);
   font-size: 11px;
+  /* <button>'s UA stylesheet sets its own line-height (computes to
+     "normal", not an inherited value) — .tile-tool-call's line-height
+     above never reaches this element via inheritance without restating
+     it explicitly here. */
+  line-height: 1.3;
   padding: 0;
   cursor: pointer;
 }
