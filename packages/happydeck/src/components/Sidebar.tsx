@@ -1,22 +1,25 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { type RefObject, useEffect } from 'react';
+import { type RefObject, useEffect, useRef } from 'react';
 import { LuPanelLeft, LuPin, LuSearch } from 'react-icons/lu';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import happydeckMarkDark from '../assets/happydeck-mark.svg';
 import happydeckMarkLight from '../assets/happydeck-mark-light.svg';
 import { type LiveSession, useHappyStore } from '../store/happyStore';
 import { SESSION_DRAG_MIME } from '../lib/dnd';
+import { downloadTranscript } from '../lib/exportTranscript';
 import { messageRole, renderablePart } from '../lib/formatMessage';
 import { useT } from '../lib/i18n';
+import { resolveOpenTerminalAction } from '../lib/openTerminal';
 import { basename } from '../lib/paths';
 import { byRecency } from '../lib/sessionOrder';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { deriveTitle } from '../lib/sessionTitle';
 import { useEffectiveTheme } from '../lib/useEffectiveTheme';
 import { usePinStore } from '../store/pinStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { useViewStore } from '../store/viewStore';
 import { useWorkspaceStore } from '../store/workspaceStore';
-import { SessionMenu } from './SessionMenu';
+import { SessionMenu, type SessionMenuHandle } from './SessionMenu';
 import { SpawnPanel } from './SpawnPanel';
 import { TabBar } from './TabBar';
 
@@ -91,8 +94,18 @@ function SessionRow({ session, collapsed, active }: SessionRowProps) {
   const renameSession = useHappyStore((s) => s.renameSession);
   const deleteSession = useHappyStore((s) => s.deleteSession);
   const resumeSession = useHappyStore((s) => s.resumeSession);
+  const abortSession = useHappyStore((s) => s.abortSession);
+  const killSession = useHappyStore((s) => s.killSession);
+  const localMachineId = useHappyStore((s) => s.localMachineId);
+  const machines = useHappyStore((s) => s.machines);
+  const runMachineBash = useHappyStore((s) => s.runMachineBash);
+  const terminalApp = useSettingsStore((s) => s.terminalApp);
+  const terminalWindowMode = useSettingsStore((s) => s.terminalWindowMode);
+  const sshTargets = useSettingsStore((s) => s.sshTargets);
+  const language = useSettingsStore((s) => s.language);
+  const menuRef = useRef<SessionMenuHandle>(null);
 
-  const metadata = session.metadata as { path?: string; host?: string } | null;
+  const metadata = session.metadata as { path?: string; host?: string; machineId?: string } | null;
   const path = metadata?.path ?? session.id;
   // The sidebar row is narrow — the full absolute path was just getting
   // arbitrarily cut off by the ellipsis anyway. The last segment is the
@@ -100,6 +113,15 @@ function SessionRow({ session, collapsed, active }: SessionRowProps) {
   // available in the row's own title tooltip.
   const label = deriveTitle(session.metadata, session.messages) ?? basename(path);
   const statusLine = deriveStatusLine(session, basename(path));
+  const openTerminalAction = resolveOpenTerminalAction(metadata, {
+    localMachineId,
+    machines,
+    terminalApp,
+    terminalWindowMode,
+    sshTargets,
+    runMachineBash,
+    language,
+  });
 
   return (
     <div
@@ -111,6 +133,11 @@ function SessionRow({ session, collapsed, active }: SessionRowProps) {
       className={`sidebar-session ${active ? 'sidebar-session-active' : ''}`}
       title={collapsed ? label : `${path}\n\n${statusLine}`}
       onClick={() => focusSession(session.id)}
+      onContextMenu={(event) => {
+        if (collapsed) return;
+        event.preventDefault();
+        menuRef.current?.openAt({ x: event.clientX, y: event.clientY });
+      }}
     >
       <span className={`status-dot ${statusClassOf(session)}`} title={`status: ${statusClassOf(session).replace('status-', '')}`} />
       {!collapsed && (
@@ -123,6 +150,7 @@ function SessionRow({ session, collapsed, active }: SessionRowProps) {
       )}
       {!collapsed && (
         <SessionMenu
+          ref={menuRef}
           session={session}
           title={label}
           pinned={pinned}
@@ -132,6 +160,10 @@ function SessionRow({ session, collapsed, active }: SessionRowProps) {
           onRename={(title) => renameSession(session.id, title)}
           onDelete={() => deleteSession(session.id)}
           onResume={() => resumeSession(session.id)}
+          onAbort={() => abortSession(session.id)}
+          onDownload={() => downloadTranscript(session)}
+          onKill={() => killSession(session.id)}
+          onOpenTerminal={openTerminalAction}
         />
       )}
     </div>

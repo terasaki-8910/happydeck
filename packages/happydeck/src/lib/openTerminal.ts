@@ -1,5 +1,6 @@
-import { terminalOpenFailedError } from './errorMessages';
-import { useSettingsStore, type TerminalAppChoice, type TerminalWindowMode } from '../store/settingsStore';
+import type { DecryptedMachine } from 'happy-client';
+import { sshTargetMissingError, terminalOpenFailedError } from './errorMessages';
+import { type Language, useSettingsStore, type TerminalAppChoice, type TerminalWindowMode } from '../store/settingsStore';
 
 /** Escapes a string for embedding as an AppleScript double-quoted string literal. */
 function appleScriptString(value: string): string {
@@ -110,4 +111,46 @@ export function openInTerminal(
   return runMachineBash(localMachineId, command).then((result) => {
     if (!result.success) throw new Error(result.error || terminalOpenFailedError(useSettingsStore.getState().language, app));
   });
+}
+
+export interface OpenTerminalContext {
+  localMachineId: string | null;
+  machines: DecryptedMachine[];
+  terminalApp: TerminalAppChoice;
+  terminalWindowMode: TerminalWindowMode;
+  sshTargets: Record<string, string>;
+  runMachineBash: (machineId: string, command: string) => Promise<{ success: boolean; error?: string }>;
+  language: Language;
+}
+
+/**
+ * Resolves the "Open in Terminal" action for a session (or undefined when
+ * it isn't eligible — no known path, or this machine's own id isn't known
+ * yet), shared between the tile header menu and the sidebar's context menu
+ * so both branch on local-vs-remote/SSH the exact same way rather than
+ * maintaining two copies that could quietly drift apart.
+ */
+export function resolveOpenTerminalAction(
+  metadata: { path?: string; host?: string; machineId?: string } | null,
+  ctx: OpenTerminalContext,
+): (() => Promise<void>) | undefined {
+  if (!metadata?.path || !ctx.localMachineId) return undefined;
+  const path = metadata.path;
+  const localMachineId = ctx.localMachineId;
+  const isLocalSession = metadata.machineId === localMachineId;
+
+  return async () => {
+    if (isLocalSession) {
+      await openInTerminal(localMachineId, path, ctx.terminalApp, ctx.terminalWindowMode, ctx.runMachineBash);
+      return;
+    }
+    const sshTarget = metadata.machineId ? ctx.sshTargets[metadata.machineId] : undefined;
+    if (!sshTarget) throw new Error(sshTargetMissingError(ctx.language, metadata.host ?? (ctx.language === 'ja' ? 'このマシン' : 'this machine')));
+    const remoteMachine = metadata.machineId ? ctx.machines.find((m) => m.id === metadata.machineId) : undefined;
+    const remoteMachinePlatform = (remoteMachine?.metadata as { platform?: string } | null)?.platform;
+    await openInTerminal(localMachineId, path, ctx.terminalApp, ctx.terminalWindowMode, ctx.runMachineBash, {
+      sshTarget,
+      platform: remoteMachinePlatform,
+    });
+  };
 }

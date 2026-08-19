@@ -5,10 +5,10 @@ import remarkGfm from 'remark-gfm';
 import { buildAttachmentDir, buildAttachmentPath, extensionForMimeType, relativeAttachmentPath } from '../lib/attachments';
 import { writeAttachmentFile } from '../lib/chunkedFileWrite';
 import { downloadTranscript } from '../lib/exportTranscript';
-import { attachDisconnectedError, cwdNotKnownError, sshTargetMissingError, unknownAttachMachineError } from '../lib/errorMessages';
+import { attachDisconnectedError, cwdNotKnownError, unknownAttachMachineError } from '../lib/errorMessages';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
 import { type TranslationKey, useT } from '../lib/i18n';
-import { openInTerminal } from '../lib/openTerminal';
+import { resolveOpenTerminalAction } from '../lib/openTerminal';
 import { explainResumeError } from '../lib/resumeError';
 import { deriveTitle } from '../lib/sessionTitle';
 import { useUndoableState } from '../lib/useUndoableState';
@@ -137,9 +137,15 @@ export function SessionTile({
   // machine; otherwise it SSHes out to that machine (see openTerminal.ts) —
   // still shown, not hidden, when no SSH target is configured yet, so the
   // menu item stays discoverable and the error names the fix (Settings).
-  const isLocalSession = metadata?.machineId === localMachineId;
-  const remoteMachine = !isLocalSession && metadata?.machineId ? machines.find((m) => m.id === metadata.machineId) : undefined;
-  const remoteMachinePlatform = (remoteMachine?.metadata as { platform?: string } | null)?.platform;
+  const openTerminalAction = resolveOpenTerminalAction(metadata ?? null, {
+    localMachineId,
+    machines,
+    terminalApp,
+    terminalWindowMode,
+    sshTargets,
+    runMachineBash,
+    language,
+  });
   const agentState = session.agentState as AgentState | null;
   const pendingRequests = Object.entries(agentState?.requests ?? {});
   const visibleMessages = session.messages
@@ -477,20 +483,7 @@ export function SessionTile({
           }
           onDownload={() => runAction(() => downloadTranscript(session))}
           onKill={() => runAction(() => killSession(session.id))}
-          onOpenTerminal={
-            metadata?.path && localMachineId
-              ? () =>
-                  runAction(() => {
-                    if (isLocalSession) return openInTerminal(localMachineId, metadata.path as string, terminalApp, terminalWindowMode, runMachineBash);
-                    const sshTarget = metadata.machineId ? sshTargets[metadata.machineId] : undefined;
-                    if (!sshTarget) throw new Error(sshTargetMissingError(language, metadata.host ?? (language === 'ja' ? 'このマシン' : 'this machine')));
-                    return openInTerminal(localMachineId, metadata.path as string, terminalApp, terminalWindowMode, runMachineBash, {
-                      sshTarget,
-                      platform: remoteMachinePlatform,
-                    });
-                  })
-              : undefined
-          }
+          onOpenTerminal={openTerminalAction ? () => runAction(openTerminalAction) : undefined}
         />
       </header>
 
