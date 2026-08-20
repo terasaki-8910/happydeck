@@ -113,6 +113,11 @@ export function BulkKillMenu() {
     setTarget({ description, sessions: targetSessions });
   };
 
+  // Nothing to kill with zero sessions — a lone skull icon sitting in an
+  // otherwise-empty titlebar had nothing to act on, which read as clutter
+  // rather than a real control.
+  if (sessions.length === 0) return null;
+
   return (
     <div className="bulk-kill" ref={rootRef}>
       <button

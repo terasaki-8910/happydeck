@@ -71,7 +71,7 @@ export function TabBar() {
           <button
             type="button"
             className="tab-label"
-            title="Click to view. Drag a session here from the sidebar to add it."
+            title={t('tabDropHint')}
             onClick={() => {
               setActiveWorkspace(workspace.id);
               showGrid();
@@ -98,7 +98,7 @@ export function TabBar() {
           autoFocus
           className="tab-new-input"
           value={draftName}
-          placeholder="workspace name"
+          placeholder={t('workspaceNamePlaceholder')}
           onChange={(event) => setDraftName(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') submitNewWorkspace();

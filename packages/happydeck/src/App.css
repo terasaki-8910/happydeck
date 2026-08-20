@@ -136,45 +136,59 @@ body {
 
 .titlebar {
   flex-shrink: 0;
-  display: flex;
-  /* NOT center — confirmed by reading wry's own inset_traffic_lights
-     (wkwebview/class/wry_web_view_parent.rs): trafficLightPosition's y
-     only grows the invisible native title-bar container that hosts the
-     buttons (title_bar_frame_height = button_height + y); only x ever
-     gets applied to the buttons themselves (button.setFrameOrigin sets
-     origin.x, never origin.y). The buttons stay pinned near the TOP of
-     that container regardless of y, so centering our own icons in this
-     44px-tall row put them measurably lower than the traffic lights —
-     confirmed against a real screenshot, not guessed. flex-start + the
-     controls' own margin-top (below) instead anchors both to
-     approximately the same reference point near the top edge.
-  */
-  align-items: flex-start;
+  /* Three tracks (not a plain flex row) so .titlebar-title centers on the
+     WHOLE window, not just the leftover space next to .titlebar-controls —
+     the left and right tracks are equal 1fr, so unequal content in each
+     doesn't pull the middle track off-center. */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  /* Both the custom icons below AND the native traffic lights center on
+     this same 44px height — the traffic lights aren't CSS-positioned at
+     all (AppKit draws them natively), but src-tauri/src/lib.rs reads this
+     element's real rendered height via position_traffic_lights() and
+     moves the native buttons to match, instead of guessing a fixed inset
+     in tauri.conf.json (see src-tauri/src/macos_titlebar.rs for why). */
+  align-items: center;
   /* Taller than a strict traffic-light-height minimum on purpose — a thin
      strip reads as a "divider," not a header, and is an easy-to-miss drag
      target; this gives a roomier grab area to go with drag-region="deep"
      below. */
   height: 44px;
   padding-left: 78px;
+  padding-right: 10px;
   background: var(--bg-tile);
   border-bottom: 1px solid var(--border);
 }
 
 .titlebar-controls {
-  /* Revised estimate: trafficLightPosition's y (in tauri.conf.json) does
-     NOT move the buttons themselves (confirmed from wry's own source,
-     wkwebview/class/wry_web_view_parent.rs — origin.y is never set on
-     the buttons, only the invisible native drag-container's height is).
-     The buttons almost certainly sit at macOS's own default traffic-
-     light inset regardless of our config, commonly cited around ~13px
-     to their center. .sidebar-footer-icon is a 15px icon + 4px padding
-     each side (~23px total); centering that on a 13px target puts its
-     own top edge around 13 - 23/2 ≈ 1.5px. Still an estimate — wry
-     doesn't expose the buttons' actual resolved position to query. */
-  margin-top: 2px;
   display: flex;
   align-items: center;
   gap: 4px;
+  justify-self: start;
+  min-width: 0;
+}
+
+/* Reserved for the active pane's session name/path today; the standing
+   convention going forward is that any *global* (not per-tile) action
+   icon belongs in this titlebar, added to .titlebar-controls on the left —
+   .titlebar-right on the far side stays reserved specifically for the
+   kill-session action, so it's always in the same corner. */
+.titlebar-title {
+  justify-self: center;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.titlebar-right {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  min-width: 0;
 }
 
 .app-shell {
@@ -523,14 +537,13 @@ body {
   position: relative;
 }
 
-/* Sits near the window's left edge (titlebar), not the sidebar's right edge
-   like a session's own action menu -- anchor from the button's own left
-   edge instead of the base rule's right:4px, so it grows rightward into
-   open space instead of immediately running into the traffic lights. */
+/* Sits at the titlebar's own right edge now (moved out of
+   .titlebar-controls into .titlebar-right) -- the base rule's right:4px
+   anchor already grows it leftward into open space, same as any other
+   right-edge action menu, so no override is needed beyond the wider
+   min-width. */
 .bulk-kill-popover {
   top: calc(100% + 4px);
-  left: 0;
-  right: auto;
   min-width: 200px;
 }
 
@@ -968,6 +981,7 @@ body {
 }
 
 .tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--bg-tile);
@@ -976,6 +990,25 @@ body {
   min-height: 220px;
   max-height: 420px;
   overflow: hidden;
+}
+
+/* Sits over the whole tile while a file is dragged over it — the accent
+   border alone (.tile-file-drag-over) reads as "something changed" but not
+   as "drop it here," especially the first time. pointer-events: none keeps
+   it purely visual so the drag/drop handlers stay owned by .tile itself. */
+.tile-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--bg-tile) 88%, transparent);
+  color: var(--text-dim);
+  font-size: 13px;
+  pointer-events: none;
 }
 
 .tile-solo {
@@ -1240,6 +1273,15 @@ body {
 }
 
 .agent-settings-custom-model button {
+  /* Overrides .session-menu-popover button's `width: 100%` (meant for the
+     full-width list rows elsewhere in this same popover) — without this,
+     that rule's `width` won this button's flex-basis entirely (flex-basis:
+     auto resolves to an explicit `width` when one is set), so the button
+     claimed the whole row and the input next to it — flex-basis: 0%, no
+     width of its own to fall back on — was squeezed to a few px. That's
+     what read as "the textbox position is weird." */
+  width: auto;
+  flex-shrink: 0;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1428,6 +1470,12 @@ body {
 .tile-messages {
   flex: 1;
   overflow-y: auto;
+  /* Explicit, not left to default `visible` — the CSS overflow spec
+     auto-promotes a `visible` x-axis to `auto` as soon as the y-axis is
+     anything else, so leaving this unset was quietly giving every message
+     row a horizontal scrollbar/gesture as a fallback for any content wider
+     than the pane, instead of just wrapping. */
+  overflow-x: hidden;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -1491,6 +1539,18 @@ body {
   border: 1px solid var(--border);
   color: var(--text);
   border-bottom-right-radius: 3px;
+}
+
+.role-agent .tile-message,
+.role-system .tile-message {
+  /* The 82% cap above is a chat-bubble convention — right for
+     .role-user's actual bubble (background + border), wrong here: these
+     have transparent background and no border, so it's plain flowing
+     text/tool-call rows, not a bubble, and capping it left a dead gap
+     down their right side instead of using the pane's real width (and
+     made the already-narrow tool-call icon+label read as floating
+     off-center in the leftover space). */
+  max-width: 100%;
 }
 
 .role-agent .tile-message {
@@ -1638,6 +1698,16 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
+  /* A flex item's default min-width is `auto`, not 0 — it refuses to
+     shrink below its content's unwrapped width, which is exactly what let
+     a long tool-call-group label (a comma-joined list of every call in the
+     burst — no cap on how many) push this button, and everything up to
+     .tile-messages, wider than the pane instead of wrapping. That's what
+     turned into horizontal scrolling once .tile-messages' overflow-y:auto
+     implicitly promoted its own unset overflow-x to auto too (the CSS
+     spec's rule for a visible+non-visible axis pair). */
+  min-width: 0;
+  width: 100%;
   background: none;
   border: none;
   color: var(--text-faint);
@@ -1690,15 +1760,21 @@ body {
 }
 
 /* The group summary's own label ("3 tool calls · Read, Bash, Write") is a
-   joined list of however many calls are in the run — truncate to one line
-   instead of wrapping, unlike a single ToolCallLine's own (usually short)
-   label. */
+   joined list of however many calls are in the run, with no cap on length
+   — wraps across lines rather than truncating with an ellipsis, so a big
+   burst's full call list is still readable without opening it. (Used to
+   truncate to one line, which only "worked" by accident: the parent
+   .tile-tool-call-toggle had no min-width:0 of its own, so instead of the
+   ellipsis ever kicking in, the whole row just grew past the pane's width
+   and forced .tile-messages to scroll horizontally.) min-width: 0 here is
+   still required — a flex item's default min-width is `auto`, which blocks
+   wrapping/shrinking below the label's unwrapped width same as it did on
+   the parent. */
 .tile-tool-group-label {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .tile-tool-group-items {
@@ -1886,7 +1962,13 @@ body {
   padding: 5px 6px;
 }
 
-.tile-composer:focus-within {
+/* Deliberately :has(the textarea itself), not :focus-within on the whole
+   form — the model/effort popover (AgentSettingsPopover) renders its
+   custom-model-id input as a DOM child of this same form, so
+   :focus-within lit up this box's border every time THAT input was
+   focused, even though it's a visually separate floating panel well above
+   this row. That read as "the box below randomly glows." */
+.tile-composer:has(.tile-composer-input:focus) {
   border-color: var(--accent);
 }
 

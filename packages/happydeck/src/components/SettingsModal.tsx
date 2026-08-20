@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES } from '../lib/agentOptions';
+import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES, translatedOptionName } from '../lib/agentOptions';
 import { type TranslationKey, useT } from '../lib/i18n';
 import { joinPath } from '../lib/paths';
 import { useHappyStore } from '../store/happyStore';
@@ -160,7 +160,7 @@ function GeneralSection() {
         <select value={defaultPermissionMode} onChange={(event) => setDefaultAgentOptions({ permissionMode: event.target.value })}>
           {CLAUDE_PERMISSION_MODES.map((mode) => (
             <option key={mode.key} value={mode.key}>
-              {mode.name}
+              {translatedOptionName(t, mode, false)}
             </option>
           ))}
         </select>
@@ -170,7 +170,7 @@ function GeneralSection() {
         <select value={defaultModelMode} onChange={(event) => setDefaultAgentOptions({ modelMode: event.target.value })}>
           {CLAUDE_MODEL_MODES.map((model) => (
             <option key={model.key} value={model.key}>
-              {model.name}
+              {translatedOptionName(t, model, true)}
             </option>
           ))}
         </select>
@@ -180,7 +180,7 @@ function GeneralSection() {
         <select value={defaultEffortLevel} onChange={(event) => setDefaultAgentOptions({ effortLevel: event.target.value })}>
           {CLAUDE_EFFORT_LEVELS.map((effort) => (
             <option key={effort.key} value={effort.key}>
-              {effort.name}
+              {translatedOptionName(t, effort, false)}
             </option>
           ))}
         </select>

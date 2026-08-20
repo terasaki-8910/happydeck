@@ -1,8 +1,22 @@
 import { type FormEvent, useState } from 'react';
 import { type AgentState, useHappyStore } from '../store/happyStore';
 import { useSelectionStore } from '../store/selectionStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { useT } from '../lib/i18n';
+
+/** "send: 3 ok" / "approve: 2 ok, 1 failed" — kept as a language-conditional
+ * sentence builder (like BulkKillMenu's forMachine/forWorkspace) rather than
+ * forced through the flat t() dictionary, since it interpolates a count. */
+function formatBulkResult(language: 'en' | 'ja', label: string, okCount: number, failedCount: number): string {
+  if (language === 'ja') {
+    return failedCount === 0 ? `${label}: ${okCount}件成功` : `${label}: ${okCount}件成功、${failedCount}件失敗`;
+  }
+  return failedCount === 0 ? `${label}: ${okCount} ok` : `${label}: ${okCount} ok, ${failedCount} failed`;
+}
 
 export function BulkActionBar() {
+  const t = useT();
+  const language = useSettingsStore((s) => s.language);
   const selected = useSelectionStore((s) => s.selected);
   const clear = useSelectionStore((s) => s.clear);
   const sessions = useHappyStore((s) => s.sessions);
@@ -29,7 +43,7 @@ export function BulkActionBar() {
     setResult(null);
     const outcomes = await Promise.allSettled(tasks.map((task) => task()));
     const failed = outcomes.filter((o) => o.status === 'rejected').length;
-    setResult(failed === 0 ? `${label}: ${outcomes.length} ok` : `${label}: ${outcomes.length - failed} ok, ${failed} failed`);
+    setResult(formatBulkResult(language, label, outcomes.length - failed, failed));
     setBusy(false);
   };
 
@@ -39,7 +53,7 @@ export function BulkActionBar() {
     if (!text || busy) return;
     setDraft('');
     runBulk(
-      'send',
+      t('bulkActionSend'),
       selectedSessions.map((s) => () => sendMessage(s.id, text)),
     );
   };
@@ -53,30 +67,29 @@ export function BulkActionBar() {
       }
     }
     if (tasks.length === 0) return;
-    runBulk('approve', tasks);
+    runBulk(t('bulkActionApprove'), tasks);
   };
+
+  const selectedCountLabel = language === 'ja' ? `${selected.size}件選択中` : `${selected.size} selected`;
+  const messagePlaceholder =
+    language === 'ja' ? `${selected.size}件のセッションにメッセージを送信…` : `message ${selected.size} session${selected.size === 1 ? '' : 's'}…`;
+  const approveAllLabel = language === 'ja' ? `保留中をすべて承認 (${pendingCount})` : `approve all pending (${pendingCount})`;
 
   return (
     <div className="bulk-bar">
-      <span className="bulk-count">{selected.size} selected</span>
+      <span className="bulk-count">{selectedCountLabel}</span>
       <form className="bulk-send" onSubmit={handleSend}>
-        <input
-          className="bulk-send-input"
-          value={draft}
-          disabled={busy}
-          placeholder={`message ${selected.size} session${selected.size === 1 ? '' : 's'}…`}
-          onChange={(event) => setDraft(event.target.value)}
-        />
+        <input className="bulk-send-input" value={draft} disabled={busy} placeholder={messagePlaceholder} onChange={(event) => setDraft(event.target.value)} />
         <button type="submit" disabled={busy || !draft.trim()}>
-          send to all
+          {t('bulkSendToAll')}
         </button>
       </form>
       <button type="button" disabled={busy || pendingCount === 0} onClick={handleApproveAll}>
-        approve all pending ({pendingCount})
+        {approveAllLabel}
       </button>
       {result && <span className="bulk-result">{result}</span>}
       <button type="button" className="bulk-clear" disabled={busy} onClick={clear}>
-        clear
+        {t('bulkClear')}
       </button>
     </div>
   );

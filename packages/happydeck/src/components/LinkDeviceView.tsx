@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { useHappyStore } from '../store/happyStore';
 import { setStoredCredentials } from '../lib/tauri';
+import { useT } from '../lib/i18n';
 
 type LinkState = { phase: 'generating' } | { phase: 'waiting'; qrDataUrl: string } | { phase: 'error'; message: string } | { phase: 'saving' };
 
@@ -12,6 +13,7 @@ type LinkState = { phase: 'generating' } | { phase: 'waiting'; qrDataUrl: string
  * doesn't exist once this ships as a signed .app the user just downloads.
  */
 export function LinkDeviceView() {
+  const t = useT();
   const [state, setState] = useState<LinkState>({ phase: 'generating' });
   const [attemptId, setAttemptId] = useState(0);
   const bootstrap = useHappyStore((s) => s.bootstrap);
@@ -57,25 +59,25 @@ export function LinkDeviceView() {
 
   return (
     <div className="link-device">
-      <h2>Link your Happy account</h2>
-      <p className="settings-hint">Scan this with the Happy app on your phone to approve this device — same as linking any other client.</p>
+      <h2>{t('linkDeviceTitle')}</h2>
+      <p className="settings-hint">{t('linkDeviceHint')}</p>
 
-      {state.phase === 'generating' && <p className="app-message">generating QR code…</p>}
+      {state.phase === 'generating' && <p className="app-message">{t('linkDeviceGenerating')}</p>}
 
       {state.phase === 'waiting' && (
         <>
-          <img className="link-device-qr" src={state.qrDataUrl} alt="Scan with the Happy app to link this device" />
-          <p className="settings-hint">Waiting for approval… (expires after 2 minutes)</p>
+          <img className="link-device-qr" src={state.qrDataUrl} alt={t('linkDeviceQrAlt')} />
+          <p className="settings-hint">{t('linkDeviceWaiting')}</p>
         </>
       )}
 
-      {state.phase === 'saving' && <p className="app-message">approved — saving credentials…</p>}
+      {state.phase === 'saving' && <p className="app-message">{t('linkDeviceSaving')}</p>}
 
       {state.phase === 'error' && (
         <>
           <p className="app-message app-message-error">{state.message}</p>
           <button type="button" onClick={() => setAttemptId((n) => n + 1)}>
-            generate a new QR code
+            {t('linkDeviceRetryQr')}
           </button>
         </>
       )}

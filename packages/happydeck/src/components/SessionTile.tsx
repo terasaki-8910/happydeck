@@ -1,11 +1,12 @@
 import { type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { LuLoaderCircle, LuSendHorizontal } from 'react-icons/lu';
+import { LuFileUp, LuLoaderCircle, LuSendHorizontal } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { buildAttachmentDir, buildAttachmentPath, extensionForMimeType, relativeAttachmentPath } from '../lib/attachments';
 import { writeAttachmentFile } from '../lib/chunkedFileWrite';
 import { downloadTranscript } from '../lib/exportTranscript';
-import { attachDisconnectedError, cwdNotKnownError, unknownAttachMachineError } from '../lib/errorMessages';
+import { attachDisconnectedError, attachmentWriteFailedError, cwdNotKnownError, unknownAttachMachineError } from '../lib/errorMessages';
+import { logError } from '../lib/errorLog';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
 import { type TranslationKey, useT } from '../lib/i18n';
 import { resolveOpenTerminalAction } from '../lib/openTerminal';
@@ -158,6 +159,15 @@ export function SessionTile({
 
   const { value: draft, set: setDraft, reset: resetDraft, undo: undoDraft, redo: redoDraft } = useUndoableState('');
   const [busy, setBusy] = useState(false);
+  // A held/repeating Enter key fires several keydown events before React
+  // commits the `busy`-driven `disabled` state to the DOM — state updates
+  // are batched, not synchronous, so a few rapid keydowns can each read the
+  // same pre-clear `draft` value and each call sendMessage before any of
+  // them takes effect. Confirmed live: an offline session (slow to resume,
+  // giving the user more time to impatiently re-press Enter) sent the same
+  // text 5 times in a row. A plain ref updates immediately, so this closes
+  // the race the state-only guard couldn't.
+  const sendingRef = useRef(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -290,6 +300,10 @@ export function SessionTile({
     try {
       await action();
     } catch (error) {
+      // Every action failure lands in the persistent debug log, in full —
+      // the in-app error banner can only ever show a short summary (see
+      // attachmentWriteFailedError for why that's not enough on its own).
+      logError('runAction', error);
       setActionError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
@@ -298,9 +312,12 @@ export function SessionTile({
 
   const submitDraft = () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text || sendingRef.current) return;
+    sendingRef.current = true;
     resetDraft('');
-    runAction(() => sendMessage(session.id, text));
+    runAction(() => sendMessage(session.id, text)).finally(() => {
+      sendingRef.current = false;
+    });
   };
 
   // Writes straight to the session's own machine via the machine-scoped
@@ -341,7 +358,15 @@ export function SessionTile({
       if (error instanceof Error && error.message === 'socket has been disconnected') {
         throw new Error(attachDisconnectedError(language, metadata.host ?? machineId));
       }
-      throw error;
+      // Whatever's left here is a raw failure from the write pipeline
+      // itself (a failed mkdir, or the machine-bash RPC used for large
+      // attachments — see chunkedFileWrite.ts) — e.g. a shell command that
+      // doesn't work the same on every OS. That's exactly the kind of
+      // detail worth keeping in full for debugging, just not as the ONLY
+      // thing shown to the user with no context for what was happening.
+      const detail = error instanceof Error ? error.message : String(error);
+      logError('attachFiles', error);
+      throw new Error(attachmentWriteFailedError(language, detail));
     } finally {
       setAttaching(false);
     }
@@ -478,6 +503,12 @@ export function SessionTile({
       onDragLeave={handleTileDragLeave}
       onDrop={handleTileDrop}
     >
+      {fileDragOver && (
+        <div className="tile-drop-overlay">
+          <LuFileUp size={28} strokeWidth={1.5} />
+          <span>{t('dropFileToAttach')}</span>
+        </div>
+      )}
       <header className="tile-header">
         {variant === 'grid' && (
           <input
@@ -485,7 +516,7 @@ export function SessionTile({
             className="tile-select"
             checked={isSelected}
             onChange={() => toggleSelected(session.id)}
-            title="Select for bulk actions"
+            title={t('selectForBulkActions')}
           />
         )}
         <span className={`status-dot ${status.className}`} title={t(status.labelKey)} />
@@ -519,7 +550,7 @@ export function SessionTile({
           <button
             type="button"
             className="tile-workspace-remove"
-            title="Remove from this tab"
+            title={t('removeFromTab')}
             onClick={() => onRemoveFromWorkspace(activeWorkspaceId, session.id)}
           >
             ×

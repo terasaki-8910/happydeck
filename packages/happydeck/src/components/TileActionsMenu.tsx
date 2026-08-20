@@ -46,7 +46,7 @@ export function TileActionsMenu({ title, busy, onAbort, onResume, onDownload, on
       <button
         type="button"
         className="session-menu-trigger"
-        title="Session actions"
+        title={t('sessionActions')}
         onClick={(event) => {
           event.stopPropagation();
           setOpen((v) => !v);
@@ -61,7 +61,7 @@ export function TileActionsMenu({ title, busy, onAbort, onResume, onDownload, on
             type="button"
             className="action-menu-warn"
             disabled={busy}
-            title="Stop the current tool use and have the agent wait — the session process keeps running."
+            title={t('stopAndWait')}
             onClick={() => {
               onAbort();
               setOpen(false);
@@ -73,7 +73,7 @@ export function TileActionsMenu({ title, busy, onAbort, onResume, onDownload, on
           <button
             type="button"
             disabled={busy}
-            title="Wake a waiting session back up."
+            title={t('wakeSession')}
             onClick={() => {
               onResume();
               setOpen(false);

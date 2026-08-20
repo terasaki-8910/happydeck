@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES, compactModelLabel, permissionColorVar, type ModeOption } from '../lib/agentOptions';
+import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES, compactModelLabel, permissionColorVar, translatedOptionName, type ModeOption } from '../lib/agentOptions';
+import { useT, type TranslationKey } from '../lib/i18n';
 
 interface AgentSettingsPopoverProps {
   permissionMode: string;
@@ -9,14 +10,23 @@ interface AgentSettingsPopoverProps {
   onChange: (patch: { permissionMode?: string; modelMode?: string; effortLevel?: string }) => void;
 }
 
-function labelOf(options: ModeOption[], key: string): string {
-  return options.find((o) => o.key === key)?.name ?? key;
+function labelOf(t: (key: TranslationKey) => string, options: ModeOption[], key: string, isModelOption: boolean): string {
+  const option = options.find((o) => o.key === key);
+  return option ? translatedOptionName(t, option, isModelOption) : key;
 }
+
+type OpenMenu = 'model' | 'permission' | null;
 
 /**
  * Compact composer-row trigger, right edge (left of send) — two separately
- * boxed badges (permission mode, model), each opening the same full
- * Model/Effort/Permission popover upward. Two distinct badges, not one
+ * boxed badges (permission mode, model), each opening its OWN popover: the
+ * model badge opens Model+Effort together (selecting either stays open, so
+ * both can be set in one pass — closing after every single pick was the
+ * actual complaint), the permission badge opens just Permission (a single
+ * mutually-exclusive choice, so closing on select is still right there).
+ * Splitting these also fixes a real clipping bug: the old combined
+ * Model+Effort+Permission list (17 rows) could be taller than a narrow
+ * split pane, pushing its top off-screen. Two distinct badges, not one
  * button with two spans next to each other: concatenated as "default
  * ·opus" it read as if "default" were describing the model. The model
  * badge NEVER shows the literal word "default" (see compactModelLabel) —
@@ -24,17 +34,18 @@ function labelOf(options: ModeOption[], key: string): string {
  * below the composer box (see SessionTile), not crowded in here.
  */
 export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, busy, onChange }: AgentSettingsPopoverProps) {
-  const [open, setOpen] = useState(false);
+  const t = useT();
+  const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [customModel, setCustomModel] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!openMenu) return;
     const onOutside = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpenMenu(null);
     };
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') setOpenMenu(null);
     };
     // Capture phase — Tauri's own drag-region mousedown listener
     // (data-tauri-drag-region, the titlebar) calls stopImmediatePropagation
@@ -46,17 +57,22 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
       document.removeEventListener('mousedown', onOutside, true);
       window.removeEventListener('keydown', onEscape);
     };
-  }, [open]);
+  }, [openMenu]);
 
   const submitCustomModel = () => {
     const trimmed = customModel.trim();
     if (!trimmed) return;
     onChange({ modelMode: trimmed });
     setCustomModel('');
-    setOpen(false);
   };
 
-  const section = (title: string, options: ModeOption[], current: string, key: 'permissionMode' | 'modelMode' | 'effortLevel') => (
+  const section = (
+    title: string,
+    options: ModeOption[],
+    current: string,
+    key: 'permissionMode' | 'modelMode' | 'effortLevel',
+    closeOnSelect: boolean,
+  ) => (
     <div className="agent-settings-section">
       <span className="session-menu-label">{title}</span>
       {options.map((option) => {
@@ -70,10 +86,10 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
             style={colorVar ? { color: `var(${colorVar})` } : undefined}
             onClick={() => {
               onChange({ [key]: option.key });
-              setOpen(false);
+              if (closeOnSelect) setOpenMenu(null);
             }}
           >
-            <span>{option.name}</span>
+            <span>{translatedOptionName(t, option, false)}</span>
             {option.key === current && <span className="agent-settings-check">✓</span>}
           </button>
         );
@@ -91,31 +107,33 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
           className="agent-settings-badge agent-settings-badge-permission"
           disabled={busy}
           style={permissionColorVarName ? { color: `var(${permissionColorVarName})` } : undefined}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpenMenu((v) => (v === 'permission' ? null : 'permission'))}
         >
-          {labelOf(CLAUDE_PERMISSION_MODES, permissionMode)}
+          {labelOf(t, CLAUDE_PERMISSION_MODES, permissionMode, false)}
         </button>
-        <button type="button" className="agent-settings-badge agent-settings-badge-model" disabled={busy} onClick={() => setOpen((v) => !v)}>
+        <button
+          type="button"
+          className="agent-settings-badge agent-settings-badge-model"
+          disabled={busy}
+          onClick={() => setOpenMenu((v) => (v === 'model' ? null : 'model'))}
+        >
           {compactModelLabel(modelMode)}
         </button>
       </div>
 
-      {open && (
+      {openMenu === 'model' && (
         <div className="session-menu-popover agent-settings-popover" onClick={(event) => event.stopPropagation()}>
           <div className="agent-settings-section">
-            <span className="session-menu-label">Model</span>
+            <span className="session-menu-label">{t('modelLabel')}</span>
             {CLAUDE_MODEL_MODES.map((option) => (
               <button
                 key={option.key}
                 type="button"
                 className="agent-settings-row"
                 disabled={busy}
-                onClick={() => {
-                  onChange({ modelMode: option.key });
-                  setOpen(false);
-                }}
+                onClick={() => onChange({ modelMode: option.key })}
               >
-                <span>{option.name}</span>
+                <span>{translatedOptionName(t, option, true)}</span>
                 {option.key === modelMode && <span className="agent-settings-check">✓</span>}
               </button>
             ))}
@@ -137,7 +155,7 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
                 type="text"
                 value={customModel}
                 disabled={busy}
-                placeholder="custom model id…"
+                placeholder={t('customModelIdPlaceholder')}
                 onChange={(event) => setCustomModel(event.target.value)}
                 onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => {
@@ -147,14 +165,18 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
                 }}
               />
               <button type="button" disabled={busy || !customModel.trim()} onClick={submitCustomModel}>
-                use
+                {t('customModelUse')}
               </button>
             </div>
           </div>
           <div className="session-menu-divider" />
-          {section('Effort', CLAUDE_EFFORT_LEVELS, effortLevel, 'effortLevel')}
-          <div className="session-menu-divider" />
-          {section('Permission', CLAUDE_PERMISSION_MODES, permissionMode, 'permissionMode')}
+          {section(t('reasoningEffort'), CLAUDE_EFFORT_LEVELS, effortLevel, 'effortLevel', false)}
+        </div>
+      )}
+
+      {openMenu === 'permission' && (
+        <div className="session-menu-popover agent-settings-popover" onClick={(event) => event.stopPropagation()}>
+          {section(t('permissionLabel'), CLAUDE_PERMISSION_MODES, permissionMode, 'permissionMode', true)}
         </div>
       )}
     </div>
@@ -181,11 +203,12 @@ export function AgentSettingsCaption({
   modelMode: string;
   effortLevel: string;
 }) {
+  const t = useT();
   return (
     <div className="tile-composer-caption">
       <span className="tile-composer-caption-path">{path}</span>
       <span className="tile-composer-caption-modes">
-        {labelOf(CLAUDE_MODEL_MODES, modelMode)} · {labelOf(CLAUDE_EFFORT_LEVELS, effortLevel)} · {labelOf(CLAUDE_PERMISSION_MODES, permissionMode)}
+        {labelOf(t, CLAUDE_MODEL_MODES, modelMode, true)} · {labelOf(t, CLAUDE_EFFORT_LEVELS, effortLevel, false)} · {labelOf(t, CLAUDE_PERMISSION_MODES, permissionMode, false)}
       </span>
     </div>
   );

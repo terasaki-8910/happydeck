@@ -49,7 +49,7 @@ export function ComposerPlusMenu({ slashCommands, mcpServers, onInsertSlashComma
 
   return (
     <div className="session-menu composer-plus" ref={rootRef}>
-      <button type="button" className="composer-plus-trigger" title="Slash commands, MCP status" onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="composer-plus-trigger" title={t('composerPlusTitle')} onClick={() => setOpen((v) => !v)}>
         +
       </button>
 
@@ -69,8 +69,8 @@ export function ComposerPlusMenu({ slashCommands, mcpServers, onInsertSlashComma
           </div>
           <div className="session-menu-divider" />
           <div className="agent-settings-section">
-            <span className="session-menu-label">Slash commands</span>
-            {slashCommands.length === 0 && <p className="composer-plus-empty">none available for this session</p>}
+            <span className="session-menu-label">{t('slashCommands')}</span>
+            {slashCommands.length === 0 && <p className="composer-plus-empty">{t('slashCommandsNoneAvailable')}</p>}
             {slashCommands.map((command) => (
               <button
                 key={command}
@@ -87,8 +87,8 @@ export function ComposerPlusMenu({ slashCommands, mcpServers, onInsertSlashComma
           </div>
           <div className="session-menu-divider" />
           <div className="agent-settings-section">
-            <span className="session-menu-label">MCP servers</span>
-            {mcpServers.length === 0 && <p className="composer-plus-empty">none connected</p>}
+            <span className="session-menu-label">{t('mcpServers')}</span>
+            {mcpServers.length === 0 && <p className="composer-plus-empty">{t('mcpServersNoneConnected')}</p>}
             {mcpServers.map((server) => (
               <div key={server.name} className="composer-plus-mcp-row">
                 <span>{server.name}</span>

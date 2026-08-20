@@ -7,6 +7,8 @@
  * server response for classic sessions.
  */
 
+import type { TranslationKey } from './i18n';
+
 export interface ModeOption {
   key: string;
   name: string;
@@ -76,4 +78,32 @@ export function permissionColorVar(permissionMode: string): string | null {
   if (permissionMode === 'acceptEdits') return '--permission-accept-edits';
   if (permissionMode === 'bypassPermissions') return '--permission-bypass';
   return null;
+}
+
+// Permission-mode and effort-level names are plain descriptive words, so
+// they're translated. Model names (opus 5, sonnet 4.6, ...) are product
+// names, not translated, EXCEPT the generic "default model" entry, which
+// describes a choice rather than naming a specific model — matches how
+// Claude's own desktop app localizes "エフォート" (effort) labels but
+// keeps model names themselves untranslated.
+const OPTION_NAME_KEY: Record<string, TranslationKey> = {
+  default: 'permOptDefault',
+  plan: 'permOptPlan',
+  dontAsk: 'permOptDontAsk',
+  acceptEdits: 'permOptAcceptEdits',
+  bypassPermissions: 'permOptBypass',
+  low: 'effortOptLow',
+  medium: 'effortOptMedium',
+  high: 'effortOptHigh',
+  xhigh: 'effortOptXhigh',
+  max: 'effortOptMax',
+};
+
+/** Translated display name for a Model/Effort/Permission option, falling
+ * back to its English `name` for model options (untranslated by design)
+ * and any value not in OPTION_NAME_KEY (e.g. a typed-in custom model id). */
+export function translatedOptionName(t: (key: TranslationKey) => string, option: ModeOption, isModelOption: boolean): string {
+  if (isModelOption && option.key === 'default') return t('modelOptDefault');
+  const key = isModelOption ? undefined : OPTION_NAME_KEY[option.key];
+  return key ? t(key) : option.name;
 }

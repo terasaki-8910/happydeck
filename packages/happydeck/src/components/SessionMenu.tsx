@@ -163,7 +163,7 @@ export const SessionMenu = forwardRef<SessionMenuHandle, SessionMenuProps>(funct
       <button
         type="button"
         className="session-menu-trigger"
-        title="Session actions"
+        title={t('sessionActions')}
         onClick={(event) => {
           event.stopPropagation();
           setCursorPosition(null);
@@ -193,7 +193,7 @@ export const SessionMenu = forwardRef<SessionMenuHandle, SessionMenuProps>(funct
                 }}
               />
               <button type="submit" disabled={busy}>
-                save
+                {t('save')}
               </button>
             </form>
           ) : (
@@ -211,7 +211,7 @@ export const SessionMenu = forwardRef<SessionMenuHandle, SessionMenuProps>(funct
                   type="button"
                   className="action-menu-warn"
                   disabled={busy}
-                  title="Stop the current tool use and have the agent wait — the session process keeps running."
+                  title={t('stopAndWait')}
                   onClick={() => runAndClose(onAbort)}
                 >
                   <LuOctagonPause size={14} />

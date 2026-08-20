@@ -11,9 +11,12 @@ import { SearchModal } from './components/SearchModal';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
 import { SESSION_DRAG_MIME } from './lib/dnd';
-import { useT } from './lib/i18n';
+import { type TranslationKey, useT } from './lib/i18n';
+import { positionTrafficLights } from './lib/tauri';
 import { type DropZone, insertAtGap, insertAtOuterEdge, insertAtZone, type OuterEdge, paneTreeSessionIds, zoneFromPointer } from './lib/paneTree';
 import { mostRecentSession } from './lib/sessionOrder';
+import { deriveTitle } from './lib/sessionTitle';
+import { bootstrapFailedError } from './lib/errorMessages';
 import { installZoomHotkeys } from './lib/zoomHotkeys';
 import { useHappyStore } from './store/happyStore';
 import { FONT_STACKS, useSettingsStore } from './store/settingsStore';
@@ -37,15 +40,23 @@ const GAP_HIT_PADDING = 10;
 
 type PaneHover = { kind: 'zone'; targetId: string; zone: DropZone } | { kind: 'gap'; splitPath: string; gapIndex: number } | { kind: 'outerEdge'; edge: OuterEdge };
 
+const DROP_SPLIT_ZONE_KEY = {
+  left: 'dropSplitLeft',
+  right: 'dropSplitRight',
+  top: 'dropSplitTop',
+  bottom: 'dropSplitBottom',
+} as const satisfies Partial<Record<DropZone, TranslationKey>>;
+
 function DropPreviewGhost({ hover }: { hover: PaneHover }) {
+  const t = useT();
   const label =
     hover.kind === 'zone'
       ? hover.zone === 'center'
-        ? 'drop to replace this pane'
-        : `drop to split · ${hover.zone}`
+        ? t('dropReplacePane')
+        : t(DROP_SPLIT_ZONE_KEY[hover.zone as keyof typeof DROP_SPLIT_ZONE_KEY])
       : hover.kind === 'gap'
-        ? 'drop to insert here · even split'
-        : `drop to add an even ${hover.edge === 'left' || hover.edge === 'right' ? 'column' : 'row'}`;
+        ? t('dropInsertEvenSplit')
+        : t(hover.edge === 'left' || hover.edge === 'right' ? 'dropAddEvenColumn' : 'dropAddEvenRow');
   return <div className={`pane-drop-preview ${hover.kind === 'zone' && hover.zone === 'center' ? 'pane-drop-preview-center' : ''}`}>{label}</div>;
 }
 
@@ -86,12 +97,22 @@ function App() {
   const panesRef = useRef<HTMLDivElement>(null);
   const rectsSnapshotRef = useRef<{ leaves: Map<string, DOMRect>; gaps: Map<string, DOMRect> } | null>(null);
   const sidebarPanelRef = useRef<PanelImperativeHandle>(null);
+  const titlebarRef = useRef<HTMLDivElement>(null);
   const font = useSettingsStore((s) => s.font);
   const theme = useSettingsStore((s) => s.theme);
+  const language = useSettingsStore((s) => s.language);
 
   useEffect(() => {
     bootstrap();
   }, [bootstrap]);
+
+  // Measures the titlebar's real rendered height so the traffic lights can
+  // be centered on the actual value instead of a number hardcoded on the
+  // Rust side that would silently drift out of sync with a future CSS
+  // change.
+  useEffect(() => {
+    if (titlebarRef.current) positionTrafficLights(titlebarRef.current.getBoundingClientRect().height);
+  }, []);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--font-ui', FONT_STACKS[font]);
@@ -138,6 +159,11 @@ function App() {
     const memberIds = new Set(activeWorkspace.sessionIds);
     return sessions.filter((s) => memberIds.has(s.id));
   }, [sessions, activeWorkspace]);
+
+  const titlebarSession = mode.type === 'panes' && activePaneSessionId ? (sessions.find((s) => s.id === activePaneSessionId) ?? null) : null;
+  const titlebarMetadata = titlebarSession?.metadata as { path?: string } | null | undefined;
+  const titlebarPath = titlebarMetadata?.path ?? titlebarSession?.id ?? null;
+  const titlebarTitle = titlebarSession ? (deriveTitle(titlebarSession.metadata, titlebarSession.messages) ?? titlebarPath) : null;
 
   const tree = mode.type === 'panes' ? mode.tree : null;
   const paneSessionIds = paneTreeSessionIds(tree);
@@ -256,7 +282,7 @@ function App() {
   const renderLeaf = (sessionId: string) => {
     if (sessionId === DROP_PREVIEW_ID) return hover ? <DropPreviewGhost hover={hover} /> : null;
     const session = sessions.find((s) => s.id === sessionId);
-    if (!session) return <p className="app-message">That session is gone.</p>;
+    if (!session) return <p className="app-message">{t('sessionGone')}</p>;
     return (
       <div className="pane-leaf-inner" onMouseDownCapture={() => setActivePane(sessionId)}>
         <SessionTile
@@ -275,7 +301,7 @@ function App() {
 
   return (
     <>
-      <div className="titlebar" data-tauri-drag-region="deep">
+      <div className="titlebar" data-tauri-drag-region="deep" ref={titlebarRef}>
         <div className="titlebar-controls">
           <button
             type="button"
@@ -288,6 +314,13 @@ function App() {
           <button type="button" className="sidebar-footer-icon" title={`${t('search')} (⌘F)`} onClick={() => setSearchOpen(true)}>
             <LuSearch size={15} strokeWidth={2} />
           </button>
+        </div>
+        {titlebarTitle && (
+          <div className="titlebar-title" title={titlebarPath ?? undefined}>
+            {titlebarTitle}
+          </div>
+        )}
+        <div className="titlebar-right">
           <BulkKillMenu />
         </div>
       </div>
@@ -312,20 +345,20 @@ function App() {
           <main className="app-main">
             {mode.type === 'grid' && <BulkActionBar />}
 
-            {status === 'loading' && <p className="app-message">connecting…</p>}
+            {status === 'loading' && <p className="app-message">{t('connecting')}</p>}
 
             {status === 'linking-required' && <LinkDeviceView />}
 
             {status === 'error' && (
               <div className="app-message app-message-error">
-                <p>{error}</p>
+                <p>{bootstrapFailedError(language, error ?? '')}</p>
                 <button type="button" className="app-retry" onClick={() => bootstrap()}>
-                  Retry
+                  {t('retry')}
                 </button>
               </div>
             )}
 
-            {status === 'ready' && sessions.length === 0 && <p className="app-message">No sessions found.</p>}
+            {status === 'ready' && sessions.length === 0 && <p className="app-message">{t('noSessionsFound')}</p>}
 
             {status === 'ready' && sessions.length > 0 && mode.type === 'panes' && displayTree && (
               <div className="panes" ref={panesRef} onDragOver={onPanesDragOver} onDragLeave={onPanesDragLeave} onDrop={onPanesDrop}>
@@ -335,7 +368,7 @@ function App() {
 
             {status === 'ready' && sessions.length > 0 && mode.type === 'grid' && (
               <div className="grid">
-                {visibleSessions.length === 0 && <p className="app-message">No sessions assigned to this tab yet.</p>}
+                {visibleSessions.length === 0 && <p className="app-message">{t('noSessionsInTab')}</p>}
                 {visibleSessions.map((session) => (
                   <SessionTile
                     key={session.id}

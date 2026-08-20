@@ -62,7 +62,14 @@ export function installZoomHotkeys(): () => void {
   };
 
   const onWheel = (event: WheelEvent) => {
-    if (!event.ctrlKey) return;
+    // Ctrl+scroll (and, on a trackpad, a pinch gesture — WebKit reports
+    // both as a wheel event with ctrlKey set) is the intentional zoom
+    // gesture; Shift held at the same time means the user is doing
+    // something else (e.g. shift+scroll to pan horizontally) and just
+    // happened to still be holding Ctrl — not a request to zoom. Platform-
+    // agnostic (no isMac branch below), so this applies the same way
+    // wherever this app runs, not just on this Mac.
+    if (!event.ctrlKey || event.shiftKey) return;
     event.preventDefault();
     applyZoom(zoomLevel + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
   };
