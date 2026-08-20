@@ -33,7 +33,14 @@ function posixAppendCommand(chunk: string, tempPath: string, create: boolean): s
 }
 
 function posixFinishCommand(tempPath: string, targetPath: string): string {
-  return `base64 -d ${shellSingleQuote(tempPath)} > ${shellSingleQuote(targetPath)} && rm -f ${shellSingleQuote(tempPath)}`;
+  // `base64 -d <file>` (a positional filename argument) is GNU coreutils
+  // syntax — confirmed broken on macOS's actual /usr/bin/base64 (BSD),
+  // which only accepts an input file via `-i` and otherwise reads stdin;
+  // handed a bare positional argument it errors with its own usage text
+  // instead of decoding anything. `<` (stdin redirection) is what both
+  // implementations actually agree on, so this works on Linux and macOS
+  // alike instead of only ever having been tried on one of them.
+  return `base64 -d < ${shellSingleQuote(tempPath)} > ${shellSingleQuote(targetPath)} && rm -f ${shellSingleQuote(tempPath)}`;
 }
 
 // child_process.exec() on Windows runs the command via cmd.exe (confirmed

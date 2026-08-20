@@ -47,7 +47,14 @@ import {
   updateSessionSummary,
 } from 'happy-client';
 import { buildMockSession, MOCK_ENABLED, mockCreateDirectory, mockListDirectory, mockMachines, mockSessions } from '../lib/mockData';
-import { sentButNotResumedError } from '../lib/errorMessages';
+import {
+  attachmentDecryptFailedError,
+  noMachineIdToResumeError,
+  notConnectedError,
+  sentButNotResumedError,
+  unknownMachineError,
+  unknownSessionError,
+} from '../lib/errorMessages';
 import { ensureNotificationPermission, notify } from '../lib/notifications';
 import { explainResumeError } from '../lib/resumeError';
 import { getLocalMachineId, getStoredCredentials } from '../lib/tauri';
@@ -147,16 +154,21 @@ let encryption: Encryption | null = null;
 const lastResumeAttemptAt = new Map<string, number>();
 const RESUME_COOLDOWN_MS = 30_000;
 
+// How often to re-fetch active/activeAt for the online/offline dot -- see
+// refreshSessionActivity in bootstrap() for why this can't just come from
+// subscribeToRelayUpdates.
+const ACTIVITY_REFRESH_INTERVAL_MS = 60_000;
+
 function requireSocket() {
   if (!relay) {
-    throw new Error('Not connected');
+    throw new Error(notConnectedError(useSettingsStore.getState().language));
   }
   return relay.socket;
 }
 
 function requireHttp(): HttpClient {
   if (!http) {
-    throw new Error('Not connected');
+    throw new Error(notConnectedError(useSettingsStore.getState().language));
   }
   return http;
 }
@@ -164,7 +176,7 @@ function requireHttp(): HttpClient {
 function requireSessionEncryptor(sessionId: string): Encryptor & Decryptor {
   const encryptor = sessionEncryptors.get(sessionId);
   if (!encryptor) {
-    throw new Error(`Unknown session ${sessionId}`);
+    throw new Error(unknownSessionError(useSettingsStore.getState().language, sessionId));
   }
   return encryptor;
 }
@@ -372,6 +384,41 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
       window.addEventListener('focus', reportAppState);
       window.addEventListener('blur', reportAppState);
       document.addEventListener('visibilitychange', reportAppState);
+
+      // `active`/`activeAt` only ever come from fetchSessions — nothing in
+      // subscribeToRelayUpdates above touches them (update-session only
+      // ever applies metadata/agentState). So once a session's underlying
+      // process dies without this client explicitly killing it (crash,
+      // network drop, machine sleep), the locally cached `active: true`
+      // never corrects itself — confirmed as the cause of a session
+      // showing green/online while genuinely dead. Re-fetching on an
+      // interval, and on focus (the moment staleness is most likely to be
+      // visible), keeps it honest without needing a dedicated live event
+      // for this specific field.
+      const refreshSessionActivity = async () => {
+        try {
+          const refreshed = await withTokenRefresh(() => fetchSessions(http!, enc));
+          const byId = new Map(refreshed.map((s) => [s.id, s]));
+          set((state) => ({
+            sessions: state.sessions.map((s) => {
+              const fresh = byId.get(s.id);
+              if (!fresh || (fresh.active === s.active && fresh.activeAt === s.activeAt)) return s;
+              // A session confirmed offline can't still be generating —
+              // `thinking` has no fetchSessions-backed source of truth of
+              // its own (ephemeral-only), so this is its one correction
+              // point too, for the same "process died without a live event
+              // telling us" case.
+              return { ...s, active: fresh.active, activeAt: fresh.activeAt, thinking: fresh.active && s.thinking };
+            }),
+          }));
+        } catch {
+          // Best-effort -- the next interval tick or focus event retries;
+          // an explicit resume/kill elsewhere still keeps state accurate
+          // for the session the user is actually interacting with.
+        }
+      };
+      window.setInterval(refreshSessionActivity, ACTIVITY_REFRESH_INTERVAL_MS);
+      window.addEventListener('focus', refreshSessionActivity);
     } catch (error) {
       set({ status: 'error', error: error instanceof Error ? error.message : String(error) });
     }
@@ -449,7 +496,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
 
   async setAgentModes(sessionId, patch) {
     const session = get().sessions.find((s) => s.id === sessionId);
-    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    if (!session) throw new Error(unknownSessionError(useSettingsStore.getState().language, sessionId));
     if (MOCK_ENABLED) {
       set((state) => ({
         sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, metadata: { ...(s.metadata as Record<string, unknown>), ...patch } } : s)),
@@ -520,14 +567,14 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
       return { type: 'success', sessionId: session.id };
     }
     const encryptor = machineEncryptors.get(options.machineId);
-    if (!encryptor) throw new Error(`Unknown machine ${options.machineId}`);
+    if (!encryptor) throw new Error(unknownMachineError(useSettingsStore.getState().language, options.machineId));
     return machineSpawnNewSession(requireSocket(), encryptor, options);
   },
 
   async listMachineDirectory(machineId, path) {
     if (MOCK_ENABLED) return mockListDirectory(path);
     const encryptor = machineEncryptors.get(machineId);
-    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    if (!encryptor) throw new Error(unknownMachineError(useSettingsStore.getState().language, machineId));
     const socket = requireSocket();
     return withDisconnectRetry(socket, () => machineListDirectory(socket, machineId, encryptor, path));
   },
@@ -535,7 +582,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   async createMachineDirectory(machineId, path, platform) {
     if (MOCK_ENABLED) return mockCreateDirectory(path);
     const encryptor = machineEncryptors.get(machineId);
-    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    if (!encryptor) throw new Error(unknownMachineError(useSettingsStore.getState().language, machineId));
     const socket = requireSocket();
     return withDisconnectRetry(socket, () => machineCreateDirectory(socket, machineId, encryptor, path, platform));
   },
@@ -543,17 +590,17 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   async runMachineBash(machineId, command) {
     if (MOCK_ENABLED) return { success: true, stdout: '', stderr: '' };
     const encryptor = machineEncryptors.get(machineId);
-    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    if (!encryptor) throw new Error(unknownMachineError(useSettingsStore.getState().language, machineId));
     return machineRunBash(requireSocket(), machineId, encryptor, command);
   },
 
   async resumeSession(sessionId) {
     const session = get().sessions.find((s) => s.id === sessionId);
-    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    if (!session) throw new Error(unknownSessionError(useSettingsStore.getState().language, sessionId));
     const machineId = (session.metadata as { machineId?: string } | null)?.machineId;
-    if (!machineId) throw new Error('This session has no recorded machineId to resume it on');
+    if (!machineId) throw new Error(noMachineIdToResumeError(useSettingsStore.getState().language));
     const encryptor = machineEncryptors.get(machineId);
-    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    if (!encryptor) throw new Error(unknownMachineError(useSettingsStore.getState().language, machineId));
     const result = await machineResumeSession(requireSocket(), encryptor, machineId, sessionId);
     // Mirrors killSession's optimistic update in reverse — the RPC's own
     // success already tells us the process is back, but statusOf/
@@ -576,7 +623,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
 
   async renameSession(sessionId, title) {
     const session = get().sessions.find((s) => s.id === sessionId);
-    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    if (!session) throw new Error(unknownSessionError(useSettingsStore.getState().language, sessionId));
     const result = await updateSessionSummary(
       requireSocket(),
       sessionId,
@@ -594,14 +641,14 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
 
   async readMachineFile(machineId, path) {
     const encryptor = machineEncryptors.get(machineId);
-    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    if (!encryptor) throw new Error(unknownMachineError(useSettingsStore.getState().language, machineId));
     const socket = requireSocket();
     return withDisconnectRetry(socket, () => machineReadFile(socket, machineId, encryptor, path));
   },
 
   async writeMachineFile(machineId, path, content) {
     const encryptor = machineEncryptors.get(machineId);
-    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    if (!encryptor) throw new Error(unknownMachineError(useSettingsStore.getState().language, machineId));
     const socket = requireSocket();
     return withDisconnectRetry(socket, () => machineWriteFile(socket, machineId, encryptor, path, content));
   },
@@ -609,7 +656,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   async writeMachineBinaryFile(machineId, path, bytes) {
     if (MOCK_ENABLED) return { success: true };
     const encryptor = machineEncryptors.get(machineId);
-    if (!encryptor) throw new Error(`Unknown machine ${machineId}`);
+    if (!encryptor) throw new Error(unknownMachineError(useSettingsStore.getState().language, machineId));
     const socket = requireSocket();
     return withDisconnectRetry(socket, () => machineWriteBinaryFile(socket, machineId, encryptor, path, bytes));
   },
@@ -618,11 +665,11 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     if (MOCK_ENABLED) return MOCK_ATTACHMENT_PNG;
     if (!encryption) throw new Error('Not connected');
     const session = get().sessions.find((s) => s.id === sessionId);
-    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    if (!session) throw new Error(unknownSessionError(useSettingsStore.getState().language, sessionId));
     const encryptedBytes = await downloadAttachmentBytes(requireHttp(), sessionId, ref);
     const blobKey = encryption.getBlobKey(session.dataKey);
     const decrypted = await decryptBlobBytes(encryptedBytes, blobKey);
-    if (!decrypted) throw new Error('Failed to decrypt attachment (wrong key or corrupted blob)');
+    if (!decrypted) throw new Error(attachmentDecryptFailedError(useSettingsStore.getState().language));
     return decrypted;
   },
 }));

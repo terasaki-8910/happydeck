@@ -66,6 +66,39 @@ function toolCallPart(ev: Record<string, unknown>): RenderablePart {
   return { kind: 'tool-call', label, detail, description };
 }
 
+// Claude Code CLI's own transcript convention for a local slash command
+// (e.g. /model): the invocation itself arrives wrapped as
+// <command-name>/model</command-name><command-message>model</command-message><command-args>…</command-args>,
+// and its result as <local-command-stdout>…</local-command-stdout> — both
+// meant for a terminal that parses (or just doesn't render) them, not this
+// UI's plain-text rendering, where the tags showed up as literal text.
+const LOCAL_COMMAND_INVOCATION = /^<command-name>([^<]*)<\/command-name>\s*<command-message>[^<]*<\/command-message>\s*<command-args>([^<]*)<\/command-args>$/;
+const LOCAL_COMMAND_STDOUT = /^<local-command-stdout>([\s\S]*)<\/local-command-stdout>$/;
+
+// The stdout above is written for a real terminal, so it can carry raw ANSI
+// SGR codes (\x1b[1m for bold on, \x1b[22m for bold off, etc.) — a plain
+// <span> has no ANSI interpreter, so these rendered as literal tofu boxes
+// (the unprintable ESC byte) glued to their own leftover "1m"/"22m" text.
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex -- deliberately matching the ESC byte to strip it
+  return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+/** Recognizes the local-slash-command shapes above; null for ordinary text. */
+function localCommandPart(text: string): RenderablePart | null {
+  const invocation = text.match(LOCAL_COMMAND_INVOCATION);
+  if (invocation) {
+    const [, name, args] = invocation;
+    return { kind: 'tool-call', label: args.trim() ? `${name} ${args.trim()}` : name, detail: null, description: null };
+  }
+  const stdout = text.match(LOCAL_COMMAND_STDOUT);
+  if (stdout) {
+    const cleaned = stripAnsi(stdout[1]).trim();
+    return cleaned ? { kind: 'text', text: cleaned } : null;
+  }
+  return null;
+}
+
 /**
  * Parses a decrypted message's content (legacy user/agent shape or the
  * newer session-envelope shape) into a renderable part, or null if it's
@@ -84,7 +117,12 @@ export function renderablePart(content: unknown): RenderablePart | null {
   if (record.role === 'user' || record.role === 'agent') {
     const inner = record.content as Record<string, unknown> | undefined;
     if (inner?.type === 'text' && typeof inner.text === 'string') {
-      return { kind: 'text', text: inner.text };
+      // An empty/whitespace-only text event (a tool-calls-only turn still
+      // emits one) isn't nothing visually — it's a full-padding .tile-message
+      // row with no visible content, reading as unexplained dead space
+      // between the tool-call lines around it.
+      if (!inner.text.trim()) return null;
+      return localCommandPart(inner.text) ?? { kind: 'text', text: inner.text };
     }
     if ((inner?.type === 'tool-call' || inner?.type === 'tool_use') && typeof inner.name === 'string') {
       if (HIDDEN_TOOL_NAMES.has(inner.name)) return null;
@@ -100,7 +138,8 @@ export function renderablePart(content: unknown): RenderablePart | null {
     const evType = String(ev?.t);
     if (HIDDEN_SESSION_EVENTS.has(evType)) return null;
     if (ev?.t === 'text' && typeof ev.text === 'string') {
-      return { kind: 'text', text: ev.text };
+      if (!ev.text.trim()) return null;
+      return localCommandPart(ev.text) ?? { kind: 'text', text: ev.text };
     }
     if (ev?.t === 'service' && typeof ev.text === 'string') {
       return { kind: 'raw', text: ev.text };
