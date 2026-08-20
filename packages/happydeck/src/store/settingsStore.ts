@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { createTauriFileStorage } from '../lib/tauriStorage';
 
 export type FontChoice = 'system' | 'inter' | 'rounded' | 'compact';
 
@@ -135,6 +136,6 @@ export const useSettingsStore = create<SettingsState>()(
           lastSpawnDirectoryByMachine: { ...state.lastSpawnDirectoryByMachine, [machineId]: directory },
         })),
     }),
-    { name: 'happydeck-settings' },
+    { name: 'happydeck-settings', storage: createJSONStorage(() => createTauriFileStorage('settings.json')) },
   ),
 );

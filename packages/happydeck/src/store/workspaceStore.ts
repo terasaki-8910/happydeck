@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { createTauriFileStorage } from '../lib/tauriStorage';
 
 export interface Workspace {
   id: string;
@@ -54,6 +55,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           ),
         })),
     }),
-    { name: 'happydeck-workspaces' },
+    { name: 'happydeck-workspaces', storage: createJSONStorage(() => createTauriFileStorage('workspaces.json')) },
   ),
 );

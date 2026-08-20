@@ -27,3 +27,16 @@ tauri-plugin-notification = "2.3.3"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 
+# Already in the dependency tree transitively (wry/tao use these for their
+# own macOS traffic-light-inset support) -- pinned here at the same
+# major.minor so cargo resolves to the existing locked version instead of
+# pulling a second copy. Used to position the traffic lights ourselves
+# (src/macos_titlebar.rs) because wry's own set_traffic_light_inset only
+# ever applies the configured y to the native title-bar container's
+# *height*, never to the buttons' own vertical origin -- see that file for
+# the full explanation.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"
+

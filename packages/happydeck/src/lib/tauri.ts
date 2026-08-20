@@ -52,3 +52,14 @@ export async function setStoredCredentials(credentials: StoredCredentials): Prom
 export async function getLocalMachineId(): Promise<string | null> {
   return withTauriTimeout(invoke<string | null>('get_local_machine_id'), localMachineIdTimeoutError(useSettingsStore.getState().language));
 }
+
+/**
+ * Vertically centers the native macOS traffic-light buttons within the
+ * real, rendered height of the `.titlebar` element (a no-op on other
+ * platforms) — see src-tauri/src/macos_titlebar.rs for why this can't be
+ * a fixed value in tauri.conf.json. Fire-and-forget: a failure here is a
+ * cosmetic miss, not worth surfacing to the user or retrying.
+ */
+export function positionTrafficLights(titlebarHeight: number): void {
+  invoke('position_traffic_lights', { titlebarHeight }).catch(() => {});
+}
