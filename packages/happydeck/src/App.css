@@ -1303,7 +1303,17 @@ body {
   padding: 8px 12px;
   background: rgba(240, 166, 60, 0.08);
   border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
+  /* Was flex-shrink: 0 with no overflow -- fine for the one-line permission
+     rows this started out holding, but an AskUserQuestion card is arbitrarily
+     tall (up to 4 questions x 4 options, each with a description). Unable to
+     shrink and unable to scroll, it overflowed the tile and got clipped by
+     .tile's overflow: hidden -- the lower questions and the Submit button
+     were simply unreachable, with the composer pushed out of view too.
+     Shrinkable + its own scroll container instead: the card gets as much
+     room as the tile can spare and scrolls past that. */
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .permission-request {
