@@ -344,6 +344,54 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
             if (!removedId) return;
             sessionEncryptors.delete(removedId);
             set((state) => ({ sessions: state.sessions.filter((s) => s.id !== removedId) }));
+            return;
+          }
+
+          // A machine coming online (or going offline) announces itself here.
+          // Without this the machine list stayed frozen at whatever bootstrap
+          // fetched, so a machine booted while happydeck was already running
+          // never appeared in the spawn panel's machine picker until a restart.
+          if (update.body.t === 'update-machine') {
+            const machineId = update.body.machineId as string | undefined;
+            if (!machineId) return;
+            const encryptor = machineEncryptors.get(machineId);
+            if (!encryptor) {
+              // First time we've heard of this machine — we have no dataKey
+              // for it, so nothing here is decryptable. Refetch the list to
+              // pick it up, same approach as 'new-session' above.
+              withTokenRefresh(() => fetchMachines(http!, enc))
+                .then((refreshed) => {
+                  for (const machine of refreshed) {
+                    if (!machineEncryptors.has(machine.id)) machineEncryptors.set(machine.id, enc.openEncryption(machine.dataKey));
+                  }
+                  set({ machines: refreshed });
+                })
+                .catch(() => {
+                  // Best-effort: the periodic refresh below is the backstop.
+                });
+              return;
+            }
+
+            const metadataUpdate = update.body.metadata as { value: string; version: number } | null | undefined;
+            const activeUpdate = update.body.active as boolean | undefined;
+            const activeAtUpdate = update.body.activeAt as number | undefined;
+
+            (metadataUpdate ? encryptor.decrypt([decodeBase64(metadataUpdate.value, 'base64')]) : Promise.resolve(null)).then((metadataResult) => {
+              set((state) => ({
+                machines: state.machines.map((m) => {
+                  if (m.id !== machineId) return m;
+                  const next = { ...m };
+                  // DecryptedMachine has no metadataVersion field (unlike a
+                  // session) -- nothing does optimistic-concurrency writes
+                  // against machine metadata, so the wire's version has
+                  // nothing to be stored against.
+                  if (metadataUpdate && metadataResult?.[0]) next.metadata = metadataResult[0];
+                  if (activeUpdate !== undefined) next.active = activeUpdate;
+                  if (activeAtUpdate !== undefined) next.activeAt = activeAtUpdate;
+                  return next;
+                }),
+              }));
+            });
           }
         },
         onEphemeral: (ephemeral) => {
@@ -415,6 +463,28 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
           // Best-effort -- the next interval tick or focus event retries;
           // an explicit resume/kill elsewhere still keeps state accurate
           // for the session the user is actually interacting with.
+        }
+
+        // Backstop for the 'update-machine' handler above: that event is the
+        // fast path, this catches anything missed while the socket was down
+        // (a machine that booted during a disconnect announces itself once,
+        // and there's no replay).
+        try {
+          const refreshedMachines = await withTokenRefresh(() => fetchMachines(http!, enc));
+          for (const machine of refreshedMachines) {
+            if (!machineEncryptors.has(machine.id)) machineEncryptors.set(machine.id, enc.openEncryption(machine.dataKey));
+          }
+          set((state) => {
+            const changed =
+              refreshedMachines.length !== state.machines.length ||
+              refreshedMachines.some((fresh, i) => {
+                const prev = state.machines[i];
+                return !prev || prev.id !== fresh.id || prev.active !== fresh.active || prev.activeAt !== fresh.activeAt;
+              });
+            return changed ? { machines: refreshedMachines } : state;
+          });
+        } catch {
+          // Same best-effort reasoning as above.
         }
       };
       window.setInterval(refreshSessionActivity, ACTIVITY_REFRESH_INTERVAL_MS);
