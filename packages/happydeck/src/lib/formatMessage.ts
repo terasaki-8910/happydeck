@@ -1,3 +1,6 @@
+import { sessionExitedWithCodeText } from './errorMessages';
+import { useSettingsStore } from '../store/settingsStore';
+
 function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;
 }
@@ -247,6 +250,41 @@ function classifySpecialText(text: string): SpecialTextClassification | null {
 
 type ClassifiedMessage = { role: 'user' | 'agent' | 'system'; part: RenderablePart | null };
 
+// Client-side session-lifecycle subtypes carried in a legacy `{type:'event',
+// data}` envelope's `data.type` (see classifyLegacyEvent) that are pure
+// plumbing, not conversation content -- 'switch' (local<->remote mode
+// handoff) fires on EVERY message sent to a session with an active local
+// terminal, which is this app's core use case; 'ready' is an idle ping.
+// Same precedent as HIDDEN_SESSION_EVENTS above, just a different envelope
+// shape carrying it.
+const HIDDEN_LEGACY_EVENT_TYPES = new Set(['switch', 'ready']);
+
+/**
+ * happy-cli's `sendSessionEvent()` wraps session-lifecycle notices (mode
+ * switch, idle ping, a human-readable status string, a process-exit code)
+ * as `{role:'agent', content:{type:'event', data: event}}` — a shape this
+ * app's own content.type check above didn't recognize, so EVERY one fell
+ * through to the generic `<${type}>` fallback and rendered as a literal,
+ * unstyled "<event>" line ahead of the real reply. Confirmed as the
+ * literal source of that text (not a truncated/malformed real tag) by
+ * reading formatMessage.ts's own fallback logic — happy-cli's wire content
+ * never contains the string "<event>" at all, this file was the one
+ * writing it. `data.type` distinguishes the actual subtype; an unrecognized
+ * future subtype degrades to silence (matching the sibling
+ * HIDDEN_SESSION_EVENTS handling) rather than back to a raw tag.
+ */
+function classifyLegacyEvent(outerRole: 'user' | 'agent', data: Record<string, unknown>): ClassifiedMessage {
+  const eventType = typeof data.type === 'string' ? data.type : null;
+  if (eventType && HIDDEN_LEGACY_EVENT_TYPES.has(eventType)) return { role: outerRole, part: null };
+  if (eventType === 'message' && typeof data.message === 'string' && data.message.trim()) {
+    return { role: 'system', part: { kind: 'text', text: data.message.trim() } };
+  }
+  if (eventType === 'exit' && typeof data.code === 'number' && data.code !== 0) {
+    return { role: 'system', part: { kind: 'text', text: sessionExitedWithCodeText(useSettingsStore.getState().language, data.code) } };
+  }
+  return { role: outerRole, part: null };
+}
+
 /**
  * The single source of truth for both renderablePart() and messageRole()
  * below — they used to be two independent passes over the same content,
@@ -282,6 +320,7 @@ function classify(content: unknown): ClassifiedMessage {
       const input = (inner.input ?? inner.args ?? {}) as Record<string, unknown>;
       return { role: outerRole, part: toolCallPart({ name: inner.name, args: input }) };
     }
+    if (inner?.type === 'event') return classifyLegacyEvent(outerRole, (inner.data ?? {}) as Record<string, unknown>);
     return { role: outerRole, part: { kind: 'raw', text: `<${String(inner?.type ?? 'unknown')}>` } };
   }
 

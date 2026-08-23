@@ -11,6 +11,10 @@ export function bootstrapFailedError(language: Language, detail: string): string
   return language === 'ja' ? `起動に失敗しました: ${detail}` : `Failed to start: ${detail}`;
 }
 
+export function sessionExitedWithCodeText(language: Language, code: number): string {
+  return language === 'ja' ? `セッションが終了しました（コード ${code}）` : `Session exited (code ${code})`;
+}
+
 export function notConnectedError(language: Language): string {
   return language === 'ja' ? 'サーバーに接続されていません' : 'Not connected';
 }
