@@ -88,6 +88,7 @@ export function mockSessions(): LiveSession[] {
       dataKey: null,
       thinking: true,
       hasMoreMessages: true,
+      messagesError: null,
       messages: [
         titleMsg('m1-0', 1, now - 500000, 'Fix the sidebar collapse animation'),
         textMsg('m1-1', 2, 'user', 'Can you explain what changed in the last refactor? Use a table if it helps.', now - 400000),
@@ -120,6 +121,7 @@ export function mockSessions(): LiveSession[] {
       dataKey: null,
       thinking: false,
       hasMoreMessages: false,
+      messagesError: null,
       messages: [
         titleMsg('m2-0', 1, now - 7100000, 'GTA5 mod load order cleanup'),
         textMsg('m2-1', 2, 'user', 'Sort my mod load order.', now - 7000000),
@@ -141,6 +143,7 @@ export function mockSessions(): LiveSession[] {
       dataKey: null,
       thinking: false,
       hasMoreMessages: false,
+      messagesError: null,
       messages: [
         textMsg('m3-1', 1, 'user', 'Find where the tag mapping is defined.', now - 90000),
         toolCallMsg('m3-2', 2, now - 80000, 'Grep', 'Grep', { pattern: 'tag-map', path: 'public' }),
@@ -197,6 +200,7 @@ export function mockSessions(): LiveSession[] {
       dataKey: null,
       thinking: false,
       hasMoreMessages: false,
+      messagesError: null,
       messages: [titleMsg('m4-0', 1, now - 40000, 'Second pane for testing splits'), textMsg('m4-1', 2, 'agent', 'Ready.', now - 30000)],
     },
   ];
@@ -246,6 +250,7 @@ export function buildMockSession(machineId: string, host: string, directory: str
     dataKey: null,
     thinking: false,
     hasMoreMessages: false,
+    messagesError: null,
     messages: [],
   };
 }

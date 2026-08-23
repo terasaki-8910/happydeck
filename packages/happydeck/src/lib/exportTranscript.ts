@@ -12,6 +12,12 @@ function partToText(part: NonNullable<ReturnType<typeof renderablePart>>): strin
   if (part.kind === 'text') return part.text;
   if (part.kind === 'file') return `[file] ${part.name}`;
   if (part.kind === 'raw') return part.text;
+  if (part.kind === 'task-notification') {
+    const bits = [part.headline];
+    if (part.metrics.length > 0) bits.push(`(${part.metrics.join(', ')})`);
+    if (part.body) bits.push(`\n${part.body}`);
+    return bits.join(' ');
+  }
   const bits = [`[${part.label}]`];
   if (part.detail) bits.push(part.detail);
   if (part.description) bits.push(`— ${part.description}`);

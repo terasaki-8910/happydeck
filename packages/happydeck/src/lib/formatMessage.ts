@@ -39,6 +39,14 @@ export type RenderablePart =
       size: number | null;
       mimeType: string | null;
     }
+  | {
+      /** A Claude Code background-task completion notice (Agent/Workflow/Monitor/background-Bash) — arrives as plain text wrapped in <task-notification> tags meant for the CLI's own agent loop, not chat prose. See taskNotificationPart below. */
+      kind: 'task-notification';
+      status: 'completed' | 'failed' | 'killed' | 'stopped' | null;
+      headline: string;
+      body: string | null;
+      metrics: string[];
+    }
   | { kind: 'raw'; text: string };
 
 function toolCallDetail(name: string, args: Record<string, unknown>): string | null {
@@ -69,11 +77,117 @@ function toolCallPart(ev: Record<string, unknown>): RenderablePart {
 // Claude Code CLI's own transcript convention for a local slash command
 // (e.g. /model): the invocation itself arrives wrapped as
 // <command-name>/model</command-name><command-message>model</command-message><command-args>…</command-args>,
-// and its result as <local-command-stdout>…</local-command-stdout> — both
-// meant for a terminal that parses (or just doesn't render) them, not this
-// UI's plain-text rendering, where the tags showed up as literal text.
-const LOCAL_COMMAND_INVOCATION = /^<command-name>([^<]*)<\/command-name>\s*<command-message>[^<]*<\/command-message>\s*<command-args>([^<]*)<\/command-args>$/;
+// and its result as <local-command-stdout>…</local-command-stdout>. Two
+// invocation orderings exist across CLI versions — <command-name> first
+// (the original, still the common case) and <command-message> first (newer,
+// seen on plugin/skill commands), where <command-args> is also optional.
+// Both are meant for a terminal that parses (or doesn't render) them, not
+// this UI's plain-text rendering, where the tags showed up as literal text.
+const LOCAL_COMMAND_INVOCATION_NAME_FIRST =
+  /^<command-name>([^<]*)<\/command-name>\s*<command-message>[^<]*<\/command-message>\s*(?:<command-args>([^<]*)<\/command-args>)?$/;
+const LOCAL_COMMAND_INVOCATION_MESSAGE_FIRST =
+  /^<command-message>[^<]*<\/command-message>\s*<command-name>([^<]*)<\/command-name>\s*(?:<command-args>([^<]*)<\/command-args>)?$/;
 const LOCAL_COMMAND_STDOUT = /^<local-command-stdout>([\s\S]*)<\/local-command-stdout>$/;
+
+// `!bash`-mode's own equivalent of the local-command tags above — same
+// terminal-only convention, same fix: the invocation is something the user
+// actually did (worth a line, attributed to them), the output is not
+// something they said.
+const BASH_INPUT = /^<bash-input>([\s\S]*)<\/bash-input>$/;
+const BASH_OUTPUT = /^(?:<bash-stdout>([\s\S]*?)<\/bash-stdout>)?(?:<bash-stderr>([\s\S]*?)<\/bash-stderr>)?$/;
+
+// Claude Code CLI's background-task completion notice (Agent/Workflow/
+// Monitor/background-Bash) — happy-cli's transcript mapper strips every
+// field except the raw text (grepped the CLI bundle: no trace of `origin`,
+// `promptSource`, or `task-notification` survives), so this is the only
+// interception point. Not anchored to the whole string (^...$) like the
+// patterns above — a "[SYSTEM NOTIFICATION - NOT USER INPUT]" preamble line
+// can precede the tag, confirmed against real transcripts.
+const TASK_NOTIFICATION = /<task-notification>([\s\S]*?)<\/task-notification>/;
+
+function extractTag(body: string, tag: string): string | null {
+  const match = body.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
+  return match ? match[1] : null;
+}
+
+/**
+ * Same as extractTag, but takes the LAST match instead of the first.
+ * Real free-text body content (<result>/<event>/<failures>) always comes
+ * after the fixed-shape bookkeeping fields (task-id, status, diagnostics,
+ * usage, ...) in every sample checked — and while genuine body content
+ * never itself contains an unescaped tag (confirmed independently over the
+ * full local corpus), <diagnostics> is agent-facing free text that COULD
+ * quote an example containing literal angle brackets. Taking the last
+ * match means a stray look-alike earlier in the body can never shadow the
+ * real, trailing tag.
+ */
+function extractLastTag(body: string, tag: string): string | null {
+  const matches = [...body.matchAll(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'g'))];
+  return matches.length > 0 ? matches[matches.length - 1][1] : null;
+}
+
+const XML_ENTITIES: Record<string, string> = { '&lt;': '<', '&gt;': '>', '&amp;': '&', '&quot;': '"', '&#39;': "'" };
+function unescapeXmlEntities(text: string): string {
+  return text.replace(/&lt;|&gt;|&amp;|&quot;|&#39;/g, (entity) => XML_ENTITIES[entity]);
+}
+
+function formatDuration(ms: number): string {
+  const minutes = ms / 60_000;
+  return minutes >= 1 ? `${minutes.toFixed(1)}m` : `${Math.round(ms / 1000)}s`;
+}
+
+function formatTokenCount(n: number): string {
+  return n >= 1000 ? `${Math.round(n / 1000)}K tok` : `${n} tok`;
+}
+
+const TASK_NOTIFICATION_STATUSES = new Set(['completed', 'failed', 'killed', 'stopped']);
+
+/**
+ * Recognizes a <task-notification> block anywhere in the text. Bails to
+ * null (falls back to plain-text rendering) if <summary> is missing, so a
+ * future change to this internal, undocumented format degrades gracefully
+ * instead of producing an empty bubble.
+ */
+function taskNotificationPart(text: string): RenderablePart | null {
+  const outer = text.match(TASK_NOTIFICATION);
+  if (!outer) return null;
+  const body = outer[1];
+
+  const rawSummary = extractTag(body, 'summary');
+  if (!rawSummary) return null;
+  const headline = unescapeXmlEntities(rawSummary).trim();
+
+  const rawStatus = extractTag(body, 'status');
+  const status = rawStatus && TASK_NOTIFICATION_STATUSES.has(rawStatus) ? (rawStatus as Extract<RenderablePart, { kind: 'task-notification' }>['status']) : null;
+
+  const usageBlock = extractTag(body, 'usage');
+  const metrics: string[] = [];
+  if (usageBlock) {
+    const agentCount = extractTag(usageBlock, 'agent_count');
+    const agentsDone = extractTag(usageBlock, 'agents_done');
+    const agentsError = extractTag(usageBlock, 'agents_error');
+    const subagentTokens = extractTag(usageBlock, 'subagent_tokens');
+    const toolUses = extractTag(usageBlock, 'tool_uses');
+    const durationMs = extractTag(usageBlock, 'duration_ms');
+    if (agentsDone && agentCount) metrics.push(`${agentsDone}/${agentCount} agents`);
+    if (agentsError && agentsError !== '0') metrics.push(`${agentsError} errors`);
+    if (durationMs) metrics.push(formatDuration(Number(durationMs)));
+    if (subagentTokens) metrics.push(formatTokenCount(Number(subagentTokens)));
+    if (toolUses) metrics.push(`${toolUses} tools`);
+  }
+
+  // <result>/<event> is the actual output worth reading; <failures> (seen on
+  // a workflow whose verify stage partially errored) is worth keeping too,
+  // appended after — everything else (task-id, tool-use-id, output-file,
+  // note, diagnostics, zero-valued agents_skipped/agents_empty_result,
+  // worktree) is internal re-run/handle bookkeeping, deliberately dropped.
+  const rawMain = extractLastTag(body, 'result') ?? extractLastTag(body, 'event');
+  const rawFailures = extractLastTag(body, 'failures');
+  const bodyParts = [rawMain, rawFailures].filter((part): part is string => Boolean(part)).map((part) => unescapeXmlEntities(part).trim());
+  const bodyText = bodyParts.length > 0 ? bodyParts.join('\n\n---\n\n') : null;
+
+  return { kind: 'task-notification', status, headline, body: bodyText, metrics };
+}
 
 // The stdout above is written for a real terminal, so it can carry raw ANSI
 // SGR codes (\x1b[1m for bold on, \x1b[22m for bold off, etc.) — a plain
@@ -84,19 +198,132 @@ function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
-/** Recognizes the local-slash-command shapes above; null for ordinary text. */
-function localCommandPart(text: string): RenderablePart | null {
-  const invocation = text.match(LOCAL_COMMAND_INVOCATION);
+type SpecialTextClassification = { role: 'user' | 'system'; part: RenderablePart | null };
+
+/**
+ * Recognizes text that represents something OTHER than free-form prose from
+ * whoever nominally "owns" the message per its outer envelope. happy-cli's
+ * local-transcript mirror wraps a slash-command's own stdout, a !bash
+ * command's own stdout/stderr, and a background-task notice in a
+ * role:'user' envelope regardless of who/what actually produced the text
+ * (confirmed against the CLI bundle: the mapper drops every discriminator
+ * except the raw string) — none of those are the user talking, even though
+ * the envelope says 'user'. The command/bash *invocation* lines are the one
+ * exception: the user really did type "/model" or "!ls", so those keep role
+ * 'user' and just get a compact tool-call-style treatment instead of
+ * literal tags.
+ */
+function classifySpecialText(text: string): SpecialTextClassification | null {
+  const taskNotification = taskNotificationPart(text);
+  if (taskNotification) return { role: 'system', part: taskNotification };
+
+  const invocation = text.match(LOCAL_COMMAND_INVOCATION_NAME_FIRST) ?? text.match(LOCAL_COMMAND_INVOCATION_MESSAGE_FIRST);
   if (invocation) {
     const [, name, args] = invocation;
-    return { kind: 'tool-call', label: args.trim() ? `${name} ${args.trim()}` : name, detail: null, description: null };
+    return { role: 'user', part: { kind: 'tool-call', label: args?.trim() ? `${name} ${args.trim()}` : name, detail: null, description: null } };
   }
   const stdout = text.match(LOCAL_COMMAND_STDOUT);
   if (stdout) {
     const cleaned = stripAnsi(stdout[1]).trim();
-    return cleaned ? { kind: 'text', text: cleaned } : null;
+    return { role: 'system', part: cleaned ? { kind: 'text', text: cleaned } : null };
   }
+
+  const bashInput = text.match(BASH_INPUT);
+  if (bashInput) {
+    return { role: 'user', part: { kind: 'tool-call', label: `! ${bashInput[1].trim()}`, detail: null, description: null } };
+  }
+  const bashOutput = text.match(BASH_OUTPUT);
+  if (bashOutput && (bashOutput[1] !== undefined || bashOutput[2] !== undefined)) {
+    const combined = [bashOutput[1], bashOutput[2]]
+      .filter((part): part is string => Boolean(part))
+      .map((part) => stripAnsi(part).trim())
+      .filter(Boolean)
+      .join('\n');
+    return { role: 'system', part: combined ? { kind: 'text', text: combined } : null };
+  }
+
   return null;
+}
+
+type ClassifiedMessage = { role: 'user' | 'agent' | 'system'; part: RenderablePart | null };
+
+/**
+ * The single source of truth for both renderablePart() and messageRole()
+ * below — they used to be two independent passes over the same content,
+ * which is exactly how a message whose role should depend on what's
+ * actually inside it (see classifySpecialText) ended up correctly
+ * text-parsed by one pass while the other still stamped it with the outer
+ * envelope's role verbatim (e.g. local-command stdout rendering as a
+ * right-aligned user bubble even though its TEXT was already being
+ * recognized and cleaned).
+ */
+function classify(content: unknown): ClassifiedMessage {
+  if (content === null || content === undefined) {
+    return { role: 'system', part: { kind: 'raw', text: '(failed to decrypt)' } };
+  }
+  if (typeof content !== 'object') {
+    return { role: 'system', part: { kind: 'raw', text: String(content) } };
+  }
+  const record = content as Record<string, unknown>;
+
+  if (record.role === 'user' || record.role === 'agent') {
+    const outerRole = record.role === 'user' ? 'user' : 'agent';
+    const inner = record.content as Record<string, unknown> | undefined;
+    if (inner?.type === 'text' && typeof inner.text === 'string') {
+      // An empty/whitespace-only text event (a tool-calls-only turn still
+      // emits one) isn't nothing visually — it's a full-padding .tile-message
+      // row with no visible content, reading as unexplained dead space
+      // between the tool-call lines around it.
+      if (!inner.text.trim()) return { role: outerRole, part: null };
+      return classifySpecialText(inner.text) ?? { role: outerRole, part: { kind: 'text', text: inner.text } };
+    }
+    if ((inner?.type === 'tool-call' || inner?.type === 'tool_use') && typeof inner.name === 'string') {
+      if (HIDDEN_TOOL_NAMES.has(inner.name)) return { role: outerRole, part: null };
+      const input = (inner.input ?? inner.args ?? {}) as Record<string, unknown>;
+      return { role: outerRole, part: toolCallPart({ name: inner.name, args: input }) };
+    }
+    return { role: outerRole, part: { kind: 'raw', text: `<${String(inner?.type ?? 'unknown')}>` } };
+  }
+
+  if (record.role === 'session') {
+    const inner = record.content as Record<string, unknown> | undefined;
+    // A session-protocol envelope (happy-wire's SessionEnvelope) carries its
+    // own role separately from this outer wrapper — text typed directly
+    // into the CLI's own terminal arrives this way (the local-transcript
+    // scanner mirrors it as role:'session' with an inner role:'user'
+    // envelope), not as a plain role:'user' message like something sent
+    // through happydeck itself.
+    const envelopeRole = inner?.role === 'user' ? 'user' : 'agent';
+    const ev = inner?.ev as Record<string, unknown> | undefined;
+    const evType = String(ev?.t);
+    if (HIDDEN_SESSION_EVENTS.has(evType)) return { role: envelopeRole, part: null };
+    if (ev?.t === 'text' && typeof ev.text === 'string') {
+      if (!ev.text.trim()) return { role: envelopeRole, part: null };
+      return classifySpecialText(ev.text) ?? { role: envelopeRole, part: { kind: 'text', text: ev.text } };
+    }
+    if (ev?.t === 'service' && typeof ev.text === 'string') {
+      return { role: envelopeRole, part: { kind: 'raw', text: ev.text } };
+    }
+    if (ev?.t === 'file' && typeof ev.name === 'string') {
+      return {
+        role: envelopeRole,
+        part: {
+          kind: 'file',
+          name: ev.name,
+          ref: typeof ev.ref === 'string' ? ev.ref : null,
+          size: typeof ev.size === 'number' ? ev.size : null,
+          mimeType: typeof ev.mimeType === 'string' ? ev.mimeType : null,
+        },
+      };
+    }
+    if (ev?.t === 'tool-call-start') {
+      if (typeof ev.name === 'string' && HIDDEN_TOOL_NAMES.has(ev.name)) return { role: envelopeRole, part: null };
+      return { role: envelopeRole, part: toolCallPart(ev) };
+    }
+    return { role: envelopeRole, part: { kind: 'raw', text: `[${evType}]` } };
+  }
+
+  return { role: 'system', part: { kind: 'raw', text: truncate(JSON.stringify(content), 200) } };
 }
 
 /**
@@ -106,84 +333,9 @@ function localCommandPart(text: string): RenderablePart | null {
  * worth a line in the transcript.
  */
 export function renderablePart(content: unknown): RenderablePart | null {
-  if (content === null || content === undefined) {
-    return { kind: 'raw', text: '(failed to decrypt)' };
-  }
-  if (typeof content !== 'object') {
-    return { kind: 'raw', text: String(content) };
-  }
-  const record = content as Record<string, unknown>;
-
-  if (record.role === 'user' || record.role === 'agent') {
-    const inner = record.content as Record<string, unknown> | undefined;
-    if (inner?.type === 'text' && typeof inner.text === 'string') {
-      // An empty/whitespace-only text event (a tool-calls-only turn still
-      // emits one) isn't nothing visually — it's a full-padding .tile-message
-      // row with no visible content, reading as unexplained dead space
-      // between the tool-call lines around it.
-      if (!inner.text.trim()) return null;
-      return localCommandPart(inner.text) ?? { kind: 'text', text: inner.text };
-    }
-    if ((inner?.type === 'tool-call' || inner?.type === 'tool_use') && typeof inner.name === 'string') {
-      if (HIDDEN_TOOL_NAMES.has(inner.name)) return null;
-      const input = (inner.input ?? inner.args ?? {}) as Record<string, unknown>;
-      return toolCallPart({ name: inner.name, args: input });
-    }
-    return { kind: 'raw', text: `<${String(inner?.type ?? 'unknown')}>` };
-  }
-
-  if (record.role === 'session') {
-    const inner = record.content as Record<string, unknown> | undefined;
-    const ev = inner?.ev as Record<string, unknown> | undefined;
-    const evType = String(ev?.t);
-    if (HIDDEN_SESSION_EVENTS.has(evType)) return null;
-    if (ev?.t === 'text' && typeof ev.text === 'string') {
-      if (!ev.text.trim()) return null;
-      return localCommandPart(ev.text) ?? { kind: 'text', text: ev.text };
-    }
-    if (ev?.t === 'service' && typeof ev.text === 'string') {
-      return { kind: 'raw', text: ev.text };
-    }
-    if (ev?.t === 'file' && typeof ev.name === 'string') {
-      return {
-        kind: 'file',
-        name: ev.name,
-        ref: typeof ev.ref === 'string' ? ev.ref : null,
-        size: typeof ev.size === 'number' ? ev.size : null,
-        mimeType: typeof ev.mimeType === 'string' ? ev.mimeType : null,
-      };
-    }
-    if (ev?.t === 'tool-call-start') {
-      if (typeof ev.name === 'string' && HIDDEN_TOOL_NAMES.has(ev.name)) return null;
-      return toolCallPart(ev);
-    }
-    return { kind: 'raw', text: `[${evType}]` };
-  }
-
-  return { kind: 'raw', text: truncate(JSON.stringify(content), 200) };
+  return classify(content).part;
 }
 
 export function messageRole(content: unknown): 'user' | 'agent' | 'system' {
-  if (content && typeof content === 'object') {
-    const record = content as Record<string, unknown>;
-    if (record.role === 'user') {
-      return 'user';
-    }
-    // A session-protocol envelope (happy-wire's SessionEnvelope) carries its
-    // own role separately from this outer wrapper — text typed directly
-    // into the CLI's own terminal arrives this way (the local-transcript
-    // scanner mirrors it as role:'session' with an inner role:'user'
-    // envelope), not as a plain role:'user' message like something sent
-    // through happydeck itself. Without checking the inner role, it read
-    // as an agent reply — no bubble, left-aligned, no way to tell the user
-    // said it.
-    if (record.role === 'session') {
-      const envelope = record.content as Record<string, unknown> | undefined;
-      return envelope?.role === 'user' ? 'user' : 'agent';
-    }
-    if (record.role === 'agent') {
-      return 'agent';
-    }
-  }
-  return 'system';
+  return classify(content).role;
 }

@@ -49,6 +49,7 @@ function statusOf(session: LiveSession): { labelKey: TranslationKey; className: 
 
 /** A tool-call line collapses to just its label by default — text is the point, tool activity is secondary. */
 function ToolCallLine({ part }: { part: Extract<RenderablePart, { kind: 'tool-call' }> }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const hasMore = Boolean(part.detail || part.description);
 
@@ -59,7 +60,7 @@ function ToolCallLine({ part }: { part: Extract<RenderablePart, { kind: 'tool-ca
         className="tile-tool-call-toggle"
         onClick={() => setExpanded((v) => !v)}
         disabled={!hasMore}
-        title={hasMore ? (expanded ? 'Collapse' : 'Expand') : undefined}
+        title={hasMore ? (expanded ? t('collapse') : t('expand')) : undefined}
       >
         {hasMore && <span className="tile-tool-call-caret">{expanded ? '▾' : '▸'}</span>}
         <span className="tile-tool-call-label">{part.label}</span>
@@ -68,6 +69,54 @@ function ToolCallLine({ part }: { part: Extract<RenderablePart, { kind: 'tool-ca
         <div className="tile-tool-call-body">
           {part.detail && <div className="tile-tool-call-detail">{part.detail}</div>}
           {part.description && <div className="tile-tool-call-description">{part.description}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TASK_NOTIFICATION_STATUS_ICON: Record<NonNullable<Extract<RenderablePart, { kind: 'task-notification' }>['status']>, string> = {
+  completed: '✓',
+  failed: '✕',
+  killed: '✕',
+  stopped: '⏸',
+};
+
+/**
+ * A background-task completion notice (Agent/Workflow/Monitor/background-
+ * Bash) — same collapsed-row treatment as ToolCallLine (reuses its CSS
+ * classes) since it's the same shape of thing: secondary activity, headline
+ * first, detail on demand. Unlike a tool call it's never grouped into a
+ * ToolCallGroup burst (see groupToolCalls) — each one names a different,
+ * individually meaningful piece of work, not a batch of the same kind of
+ * step.
+ */
+function TaskNotificationLine({ part }: { part: Extract<RenderablePart, { kind: 'task-notification' }> }) {
+  const t = useT();
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = Boolean(part.body);
+
+  return (
+    <div className={`tile-message tile-tool-call ${expanded ? 'tile-tool-call-expanded' : ''}`}>
+      <button
+        type="button"
+        className="tile-tool-call-toggle"
+        onClick={() => setExpanded((v) => !v)}
+        disabled={!hasMore}
+        title={hasMore ? (expanded ? t('collapse') : t('expand')) : undefined}
+      >
+        {hasMore && <span className="tile-tool-call-caret">{expanded ? '▾' : '▸'}</span>}
+        {part.status && <span className="tile-tool-call-caret">{TASK_NOTIFICATION_STATUS_ICON[part.status]}</span>}
+        <span className="tile-tool-call-label">
+          {part.headline}
+          {part.metrics.length > 0 && <span className="tile-tool-call-metrics"> · {part.metrics.join(' · ')}</span>}
+        </span>
+      </button>
+      {expanded && part.body && (
+        <div className="tile-tool-call-body">
+          <div className="tile-message-markdown">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.body}</ReactMarkdown>
+          </div>
         </div>
       )}
     </div>
@@ -147,6 +196,7 @@ export function SessionTile({
   const abortSession = useHappyStore((s) => s.abortSession);
   const resumeSession = useHappyStore((s) => s.resumeSession);
   const loadOlderMessages = useHappyStore((s) => s.loadOlderMessages);
+  const refreshMessages = useHappyStore((s) => s.refreshMessages);
   const killSession = useHappyStore((s) => s.killSession);
   const createMachineDirectory = useHappyStore((s) => s.createMachineDirectory);
   const writeMachineBinaryFile = useHappyStore((s) => s.writeMachineBinaryFile);
@@ -640,7 +690,18 @@ export function SessionTile({
             {loadingOlder ? t('loadingOlder') : t('loadOlderMessages')}
           </button>
         )}
-        {visibleMessages.length === 0 && <p className="tile-empty">{t('noMessages')}</p>}
+        {session.messagesError ? (
+          <div className="tile-messages-error">
+            <p className="tile-empty">
+              {t('messagesLoadFailed')}: {session.messagesError}
+            </p>
+            <button type="button" onClick={() => refreshMessages(session.id)}>
+              {t('retry')}
+            </button>
+          </div>
+        ) : (
+          visibleMessages.length === 0 && <p className="tile-empty">{t('noMessages')}</p>
+        )}
         {groupToolCalls(visibleMessages).map((segment) => {
           if (segment.kind === 'tool-group') {
             return (
@@ -661,6 +722,8 @@ export function SessionTile({
                 <ToolCallLine part={part} />
               ) : part.kind === 'file' ? (
                 <AttachmentFile sessionId={session.id} name={part.name} ref={part.ref} size={part.size} mimeType={part.mimeType} />
+              ) : part.kind === 'task-notification' ? (
+                <TaskNotificationLine part={part} />
               ) : (
                 <p className="tile-message">{part.text}</p>
               )}

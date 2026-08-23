@@ -12,6 +12,7 @@ import { useT } from '../lib/i18n';
 import { resolveOpenTerminalAction } from '../lib/openTerminal';
 import { basename } from '../lib/paths';
 import { byRecency } from '../lib/sessionOrder';
+import { isSideChat } from '../lib/sessionIdentity';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { deriveTitle } from '../lib/sessionTitle';
 import { useEffectiveTheme } from '../lib/useEffectiveTheme';
@@ -220,7 +221,14 @@ export function Sidebar({ sessions, focusedSessionId, panelRef }: SidebarProps) 
   // still shows immediately — only pure reordering among the same set of
   // sessions gets smoothed, so a brand new session is never delayed or a
   // deleted one left showing.
-  const liveOrdered = byRecency(sessions);
+  // Side chats are a forked, hidden-by-design conversation shape (see
+  // isSideChat's own comment) — the reference app never lists them at the
+  // top level either, they're meant to render only inside their parent's
+  // own panel, which happydeck doesn't have yet. Filtered here (display
+  // only) rather than in the store, since resume/kill/etc. still need to
+  // be able to target one by real id if it's ever reached another way.
+  const visibleSessions = sessions.filter((s) => !isSideChat(s));
+  const liveOrdered = byRecency(visibleSessions);
   const liveKey = liveOrdered.map((s) => s.id).join(',');
   const debouncedKey = useDebouncedValue(liveKey, 500);
   const liveSetKey = [...liveOrdered.map((s) => s.id)].sort().join(',');

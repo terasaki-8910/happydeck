@@ -72,13 +72,23 @@ export function searchSessions(sessions: LiveSession[], rawQuery: string): Searc
 
     for (let i = session.messages.length - 1; i >= 0 && countForSession < MAX_PER_SESSION; i--) {
       const message = session.messages[i];
-      if (messageRole(message.content) === 'system') continue;
       const part = renderablePart(message.content);
-      if (part?.kind !== 'text') continue;
-      const oneLine = part.text.replace(/\s+/g, ' ');
+      // A task-notification's role is 'system' (see formatMessage.ts —
+      // that's the correct fix for its wrong-bubble rendering), but its
+      // <result> body is real content worth finding — the entire output of
+      // a background agent, not protocol chatter. So it's carved out of the
+      // system-role skip below rather than excluded along with it.
+      let haystack: string | null = null;
+      if (part?.kind === 'task-notification') {
+        haystack = [part.headline, part.body].filter(Boolean).join('\n');
+      } else if (part?.kind === 'text' && messageRole(message.content) !== 'system') {
+        haystack = part.text;
+      }
+      if (!haystack) continue;
+      const oneLine = haystack.replace(/\s+/g, ' ');
       const index = oneLine.toLowerCase().indexOf(query);
       if (index === -1) continue;
-      results.push({ session, title, host, matchedAt: message.createdAt, snippet: snippetAround(part.text, index, query.length) });
+      results.push({ session, title, host, matchedAt: message.createdAt, snippet: snippetAround(haystack, index, query.length) });
       countForSession++;
     }
   }
