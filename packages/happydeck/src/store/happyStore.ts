@@ -95,6 +95,16 @@ export interface LiveSession extends DecryptedSession {
   hasMoreMessages: boolean;
   /** Set while loadOlderMessages is in flight for this session, so the UI can't fire it twice concurrently. */
   loadingOlderMessages?: boolean;
+  /**
+   * Set when bootstrap's (or a later refreshMessages retry's) fetch of this
+   * session's messages failed — distinct from a session that has genuinely
+   * never had any messages. Without this, both cases rendered as the exact
+   * same "(no messages)" empty state, with no way to tell "nothing to show"
+   * from "something went wrong and nothing has retried since" (nothing
+   * else in this store ever re-fetches a session's messages after
+   * bootstrap). null once messages have loaded successfully at least once.
+   */
+  messagesError: string | null;
 }
 
 interface HappyStoreState {
@@ -104,6 +114,8 @@ interface HappyStoreState {
   sessions: LiveSession[];
   machines: DecryptedMachine[];
   bootstrap: () => Promise<void>;
+  /** Re-fetches one session's latest message page — the recovery path for messagesError, and what the socket 'connect' handler and a tile's own mount both call for a session that never successfully loaded messages. */
+  refreshMessages: (sessionId: string) => Promise<void>;
   loadOlderMessages: (sessionId: string) => Promise<void>;
   sendMessage: (sessionId: string, text: string, meta?: SendMessageMeta) => Promise<void>;
   setAgentModes: (sessionId: string, patch: SessionAgentModesPatch) => Promise<void>;
@@ -158,6 +170,44 @@ const RESUME_COOLDOWN_MS = 30_000;
 // refreshSessionActivity in bootstrap() for why this can't just come from
 // subscribeToRelayUpdates.
 const ACTIVITY_REFRESH_INTERVAL_MS = 60_000;
+
+// bootstrap's per-session message fetch used to fire all of them in the same
+// tick (`Promise.all`/`allSettled` over the full session list) -- confirmed
+// live as the cause of spurious per-session timeouts on an account with
+// enough sessions: AbortSignal.timeout is armed at call time (http.ts), so
+// time spent queued behind the browser's per-host connection limit counts
+// against the request's own budget, and a wider fan-out means a longer
+// queue. Running a small, fixed number at a time keeps each request's
+// actual wait time bounded regardless of how many sessions the account has.
+const MESSAGE_FETCH_CONCURRENCY = 4;
+
+// A live 'new-message' push isn't guaranteed to arrive in seq order (real
+// socket traffic shows occasional adjacent-pair inversions), so a blind
+// tail-append can leave two messages transiently swapped even though the
+// fetched page they follow is correctly seq-sorted. Keeps `messages` sorted
+// by inserting at the right position instead of always at the end.
+function insertBySeq(messages: DecryptedMessage[], message: DecryptedMessage): DecryptedMessage[] {
+  const index = messages.findIndex((m) => m.seq > message.seq);
+  if (index === -1) return [...messages, message];
+  return [...messages.slice(0, index), message, ...messages.slice(index)];
+}
+
+async function runWithConcurrency<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      try {
+        results[index] = { status: 'fulfilled', value: await task(items[index]) };
+      } catch (error) {
+        results[index] = { status: 'rejected', reason: error };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 function requireSocket() {
   if (!relay) {
@@ -237,31 +287,56 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
       sessionEncryptors = new Map(allSessions.map((s) => [s.id, enc.openEncryption(s.dataKey)]));
       machineEncryptors = new Map(allMachines.map((m) => [m.id, enc.openEncryption(m.dataKey)]));
 
-      // Promise.all here would let ONE slow/failed session's message fetch
-      // reject the whole bootstrap — confirmed live: with enough sessions,
-      // one request tripping the timeout took down the entire load, so a
-      // retry kept landing back on the same failure instead of ever
-      // reaching a usable state. allSettled + per-session fallback matches
+      // A rejected fetch must not take the whole bootstrap down — confirmed
+      // live: with enough sessions, one request tripping the timeout used
+      // to take down the entire load, so a retry kept landing back on the
+      // same failure instead of ever reaching a usable state. Settling
+      // per-session (now via runWithConcurrency, see its own comment for
+      // why unbounded-in-parallel was itself part of the problem) matches
       // this app's existing resilience rule elsewhere (a broken row doesn't
       // take the whole list down with it) — a session that fails to load
-      // its messages still shows up, just empty, rather than vanishing the
-      // entire account's session list.
+      // its messages still shows up, rather than vanishing the entire
+      // account's session list. What it must NOT do is silently look
+      // identical to a session that genuinely has zero messages, which is
+      // what `messages: [], hasMoreMessages: false` with no error field
+      // used to do — that state had no recovery path anywhere in this
+      // store (nothing re-fetches messages after bootstrap), so a session
+      // hit by a transient failure here stayed stuck on "(no messages)" for
+      // the rest of the app's lifetime.
       const liveSessions: LiveSession[] = (
-        await Promise.allSettled(
-          allSessions.map(async (session) => {
-            const encryptor = sessionEncryptors.get(session.id)!;
-            const page = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, session.id));
-            return { ...session, messages: page.messages, hasMoreMessages: page.hasMore, thinking: false };
-          }),
-        )
+        await runWithConcurrency(allSessions, MESSAGE_FETCH_CONCURRENCY, async (session) => {
+          const encryptor = sessionEncryptors.get(session.id)!;
+          const page = await withTokenRefresh(() => fetchLatestMessages(http!, encryptor, session.id));
+          return { ...session, messages: page.messages, hasMoreMessages: page.hasMore, thinking: false, messagesError: null };
+        })
       ).map((result, i) =>
-        result.status === 'fulfilled' ? result.value : { ...allSessions[i], messages: [], hasMoreMessages: false, thinking: false },
+        result.status === 'fulfilled'
+          ? result.value
+          : {
+              ...allSessions[i],
+              messages: [],
+              hasMoreMessages: false,
+              thinking: false,
+              messagesError: result.reason instanceof Error ? result.reason.message : String(result.reason),
+            },
       );
 
       set({ status: 'ready', localMachineId, sessions: liveSessions, machines: allMachines });
 
       relay?.disconnect();
       relay = new RelaySocket({ token: currentToken, appState: getAppState });
+
+      // socket.ts's own doc comment: "connectionStateRecovery is not
+      // enabled server-side ... treat every `connect` as 'refetch
+      // everything'" — this fires on the initial connect AND every
+      // reconnect, and is what actually recovers a session stuck on
+      // messagesError (or a genuinely-just-created session bootstrap
+      // raced against) without waiting for the user to notice and hit
+      // Retry themselves.
+      relay.socket.on('connect', () => {
+        const stale = get().sessions.filter((s) => s.messagesError || s.messages.length === 0);
+        for (const session of stale) void get().refreshMessages(session.id);
+      });
 
       subscribeToRelayUpdates(relay.socket, {
         onUpdate: (update) => {
@@ -282,7 +357,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
                   // confirmed live as the same message rendering several
                   // times in a row on a machine with an unstable link.
                   // Appending unconditionally had no defense against that.
-                  s.id === sid && !s.messages.some((m) => m.id === newMessage.id) ? { ...s, messages: [...s.messages, newMessage] } : s,
+                  s.id === sid && !s.messages.some((m) => m.id === newMessage.id) ? { ...s, messages: insertBySeq(s.messages, newMessage) } : s,
                 ),
               }));
             });
@@ -333,7 +408,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
               set((state) =>
                 state.sessions.some((s) => s.id === found.id)
                   ? state
-                  : { sessions: [...state.sessions, { ...found, messages: page.messages, hasMoreMessages: page.hasMore, thinking: false }] },
+                  : { sessions: [...state.sessions, { ...found, messages: page.messages, hasMoreMessages: page.hasMore, thinking: false, messagesError: null }] },
               );
             });
             return;
@@ -491,6 +566,21 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
       window.addEventListener('focus', refreshSessionActivity);
     } catch (error) {
       set({ status: 'error', error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  async refreshMessages(sessionId) {
+    if (MOCK_ENABLED) return;
+    const encryptor = sessionEncryptors.get(sessionId);
+    if (!encryptor) return;
+    try {
+      const page = await fetchLatestMessages(requireHttp(), encryptor, sessionId);
+      set((state) => ({
+        sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, messages: page.messages, hasMoreMessages: page.hasMore, messagesError: null } : s)),
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      set((state) => ({ sessions: state.sessions.map((s) => (s.id === sessionId ? { ...s, messagesError: message } : s)) }));
     }
   },
 
@@ -733,7 +823,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
 
   async downloadAttachment(sessionId, ref) {
     if (MOCK_ENABLED) return MOCK_ATTACHMENT_PNG;
-    if (!encryption) throw new Error('Not connected');
+    if (!encryption) throw new Error(notConnectedError(useSettingsStore.getState().language));
     const session = get().sessions.find((s) => s.id === sessionId);
     if (!session) throw new Error(unknownSessionError(useSettingsStore.getState().language, sessionId));
     const encryptedBytes = await downloadAttachmentBytes(requireHttp(), sessionId, ref);

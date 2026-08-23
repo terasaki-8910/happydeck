@@ -53,17 +53,32 @@ async function fetchMessagesPage(
   const query = new URLSearchParams({ before_seq: String(beforeSeq), limit: String(limit) });
   const response = await http.get<MessagesResponse>(`/v3/sessions/${sessionId}/messages?${query.toString()}`);
 
-  const encryptedBlobs = response.messages.map((message) => decodeBase64(message.content.c, 'base64'));
-  const decryptedContents = await encryptor.decrypt(encryptedBlobs);
+  // Guard against a malformed row (content.t !== 'encrypted', or .c not a
+  // real base64 string) throwing out of decodeBase64's atob() call and
+  // rejecting the ENTIRE page over one bad message -- mirrors the shape
+  // guard happy-cli itself applies before decoding. A row that fails this
+  // check decrypts to null (same as a genuine decrypt failure) rather than
+  // taking every other message in the page down with it.
+  const encryptedBlobs = response.messages.map((message) =>
+    message.content?.t === 'encrypted' && typeof message.content.c === 'string' ? decodeBase64(message.content.c, 'base64') : null,
+  );
+  const decryptable = encryptedBlobs.filter((blob): blob is Uint8Array => blob !== null);
+  const decryptedContents = await encryptor.decrypt(decryptable);
 
-  const messages = response.messages
-    .map((message, index) => ({
-      id: message.id,
-      seq: message.seq,
-      createdAt: message.createdAt,
-      content: decryptedContents[index] ?? null,
-    }))
-    .reverse();
+  let decryptedIndex = 0;
+  const messages = response.messages.map((message, index) => ({
+    id: message.id,
+    seq: message.seq,
+    createdAt: message.createdAt,
+    content: encryptedBlobs[index] !== null ? (decryptedContents[decryptedIndex++] ?? null) : null,
+  }));
+
+  // Ascending by seq, not a blind .reverse() of whatever order the server
+  // happened to answer in -- seq is per-session, server-assigned, and dense
+  // (confirmed against real socket traffic), so sorting on it is correct
+  // regardless of which direction any given endpoint/response returns, and
+  // self-corrects the rare out-of-order delivery a raw reverse can't.
+  messages.sort((a, b) => a.seq - b.seq);
 
   return { messages, hasMore: response.hasMore };
 }

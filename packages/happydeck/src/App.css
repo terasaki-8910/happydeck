@@ -1498,6 +1498,31 @@ body {
   margin: 0;
 }
 
+.tile-messages-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.tile-messages-error .tile-empty {
+  color: var(--danger);
+}
+
+.tile-messages-error button {
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.tile-messages-error button:hover {
+  border-color: var(--text-faint);
+}
+
 .tile-load-older {
   align-self: center;
   margin-bottom: 4px;
@@ -1747,6 +1772,14 @@ body {
 
 .tile-tool-call-label {
   color: inherit;
+}
+
+/* Inline, dimmer than the headline it trails — deliberately NOT
+   .tile-tool-call-description's styling (margin-top + block layout), which
+   is meant for the expanded body area, not text sitting inline inside the
+   collapsed label itself. */
+.tile-tool-call-metrics {
+  color: var(--text-faint);
 }
 
 .tile-tool-call-body {
