@@ -3,7 +3,7 @@ import { LuFileUp, LuLoaderCircle, LuSendHorizontal } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { buildAttachmentDir, buildAttachmentPath, extensionForMimeType, relativeAttachmentPath } from '../lib/attachments';
-import { writeAttachmentFile } from '../lib/chunkedFileWrite';
+import { AttachmentCancelledError, writeAttachmentFile } from '../lib/chunkedFileWrite';
 import { downloadTranscript } from '../lib/exportTranscript';
 import { attachDisconnectedError, attachmentWriteFailedError, cwdNotKnownError, unknownAttachMachineError } from '../lib/errorMessages';
 import { logError } from '../lib/errorLog';
@@ -229,6 +229,11 @@ export function SessionTile({
   const pendingOlderLoadScrollHeightRef = useRef<number | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  // Polled between chunk uploads (see writeAttachmentFile) — a ref, not
+  // state, because the upload loop closes over it once and needs to see
+  // the CURRENT value on every iteration, not the value from the render
+  // that started it.
+  const attachCancelledRef = useRef(false);
   const [fileDragOver, setFileDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -344,6 +349,24 @@ export function SessionTile({
     return () => observer.disconnect();
   }, []);
 
+  // Escape cancels an in-progress attachment. Bound on window, NOT on the
+  // composer textarea: while attaching, the textarea carries disabled={busy},
+  // and a disabled form control receives no key events at all — an Escape
+  // handler there could never fire, which is exactly the state the user
+  // needs to escape from.
+  useEffect(() => {
+    if (!attaching) return;
+    // globalThis.KeyboardEvent, not the bare name: this file imports
+    // React's own KeyboardEvent type, which shadows the DOM one.
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      attachCancelledRef.current = true;
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [attaching]);
+
   const runAction = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setActionError(null);
@@ -386,6 +409,7 @@ export function SessionTile({
     if (!platform) throw new Error(unknownAttachMachineError(language, metadata.host ?? machineId));
 
     setAttaching(true);
+    attachCancelledRef.current = false;
     try {
       const attachDir = buildAttachmentDir(cwd, Date.now());
       const mkdirResult = await createMachineDirectory(machineId, attachDir, platform);
@@ -393,14 +417,30 @@ export function SessionTile({
 
       const relativePaths: string[] = [];
       for (const [index, file] of files.entries()) {
+        if (attachCancelledRef.current) throw new AttachmentCancelledError();
         const fileName = file.name || `pasted-${index + 1}.${extensionForMimeType(file.type)}`;
         const bytes = new Uint8Array(await file.arrayBuffer());
-        await writeAttachmentFile(runMachineBash, writeMachineBinaryFile, machineId, platform, buildAttachmentPath(attachDir, fileName), bytes);
+        await writeAttachmentFile(
+          runMachineBash,
+          writeMachineBinaryFile,
+          machineId,
+          platform,
+          buildAttachmentPath(attachDir, fileName),
+          bytes,
+          () => attachCancelledRef.current,
+        );
         relativePaths.push(relativeAttachmentPath(cwd, attachDir, fileName));
       }
 
       setDraft((prev) => `${prev}${relativePaths.map((p) => `[Attached file: ${p}]`).join(' ')} `, { coalesce: false });
     } catch (error) {
+      // A cancel is the user getting what they asked for, not a failure —
+      // swallow it rather than surfacing an error banner. Any partially
+      // written remote temp file is left behind deliberately: it's in the
+      // machine's own tmp dir under a uuid name, so the OS reclaims it,
+      // and chasing it would mean another RPC on a connection we may have
+      // just given up on.
+      if (error instanceof AttachmentCancelledError) return;
       // Already retried transparently a couple of times if the connection
       // to that machine merely blipped mid-call (see withDisconnectRetry) —
       // reaching here means it stayed down longer than that, most likely on
@@ -762,6 +802,9 @@ export function SessionTile({
               <span className="tile-composer-attaching">
                 <LuLoaderCircle size={13} className="tile-composer-spinner" />
                 {t('attachingFile')}
+                <button type="button" className="tile-composer-attaching-cancel" onClick={() => (attachCancelledRef.current = true)}>
+                  {t('cancel')}
+                </button>
               </span>
             )}
           </div>

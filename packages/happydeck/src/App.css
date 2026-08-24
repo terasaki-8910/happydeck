@@ -2097,7 +2097,11 @@ body {
   font-family: inherit;
   font-size: 12.5px;
   line-height: 1.4;
-  padding: 6px 4px;
+  /* padding-left 0, not 4px: the row's own gap already separates this from
+     the "+" button, and the extra 4px on top of it read as the placeholder
+     floating away from it. The remaining separation is .tile-composer's
+     gap alone. */
+  padding: 6px 4px 6px 0;
   min-width: 0;
   min-height: 30px;
   max-height: 140px;
@@ -2115,7 +2119,26 @@ body {
   font-size: 12px;
   color: var(--text-dim);
   background: var(--bg);
-  pointer-events: none;
+  /* NOT pointer-events: none any more -- the overlay now carries a Cancel
+     button, and an upload with no way out was the actual complaint. The
+     overlay covers only the textarea's own wrapper, so letting it take
+     clicks costs nothing else. */
+}
+
+.tile-composer-attaching-cancel {
+  margin-left: auto;
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.tile-composer-attaching-cancel:hover {
+  border-color: var(--text-faint);
+  color: var(--text);
 }
 
 .tile-composer-spinner {
@@ -2660,8 +2683,13 @@ body {
 
 .composer-plus-trigger {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
+  /* 26px, down from 30px: the button now holds a 16px icon rather than a
+     text glyph that needed room for its own line box, and this brings it
+     closer to the send button's 26.4px so the row's two end controls read
+     as the same size. Narrower also means the placeholder starts closer
+     to it, which was the other half of the request. */
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2669,9 +2697,11 @@ body {
   border: none;
   border-radius: 6px;
   color: var(--text-dim);
-  font-size: 16px;
   line-height: 1;
   cursor: pointer;
+  /* No font-size/font-family: the child is an SVG now, so neither applies
+     — and inheriting the UA control font was the source of the
+     cross-platform misalignment this replaced (see ComposerPlusMenu.tsx). */
 }
 
 .composer-plus-trigger:hover {

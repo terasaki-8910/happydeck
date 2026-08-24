@@ -17,6 +17,7 @@ import { type DropZone, insertAtGap, insertAtOuterEdge, insertAtZone, type Outer
 import { mostRecentSession } from './lib/sessionOrder';
 import { deriveTitle } from './lib/sessionTitle';
 import { bootstrapFailedError } from './lib/errorMessages';
+import { installWindowsClipboardFix } from './lib/winClipboard';
 import { installZoomHotkeys } from './lib/zoomHotkeys';
 import { useHappyStore } from './store/happyStore';
 import { FONT_STACKS, useSettingsStore } from './store/settingsStore';
@@ -141,6 +142,7 @@ function App() {
   }, [toggleSettings, toggleSearch]);
 
   useEffect(() => installZoomHotkeys(), []);
+  useEffect(() => installWindowsClipboardFix(), []);
 
   // Land on the most-recently-active session's panes view by default, once —
   // this never runs again after the user (or a tab click) picks a view.

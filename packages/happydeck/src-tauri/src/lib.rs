@@ -7,6 +7,9 @@ use tauri::Manager;
 #[cfg(target_os = "macos")]
 mod macos_titlebar;
 
+#[cfg(target_os = "windows")]
+mod win_clipboard;
+
 struct TitlebarHeight(std::sync::Mutex<Option<f64>>);
 
 // Must match packages/happy-client/src/auth/credentials.ts exactly — both
@@ -158,6 +161,24 @@ fn position_traffic_lights(window: tauri::WebviewWindow, state: tauri::State<'_,
     Ok(())
 }
 
+/// Windows-only in effect (see win_clipboard.rs for why it exists at all).
+/// Declared unconditionally so the single generate_handler! list below
+/// doesn't need a per-OS variant — the frontend only invokes this when it
+/// detects Windows, and on any other platform it fails loudly rather than
+/// pretending to have copied something.
+#[tauri::command]
+fn copy_text_owned(window: tauri::WebviewWindow, text: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        win_clipboard::copy_text_owned(window, text)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (window, text);
+        Err("copy_text_owned is Windows-only".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -172,7 +193,8 @@ pub fn run() {
             get_local_machine_id,
             position_traffic_lights,
             read_app_config_file,
-            write_app_config_file
+            write_app_config_file,
+            copy_text_owned
         ])
         .on_window_event(|window, event| {
             // Re-anchor to the window's new frame on every resize (a fixed

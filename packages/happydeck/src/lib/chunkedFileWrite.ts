@@ -60,12 +60,26 @@ function windowsFinishCommand(tempPath: string, targetPath: string): string {
   return `certutil -decode "${tempPath}" "${targetPath}" & del "${tempPath}"`;
 }
 
+/** Thrown when the caller's isCancelled() returned true between chunks. Distinct from a real failure so the UI can stay quiet instead of showing an error. */
+export class AttachmentCancelledError extends Error {
+  constructor() {
+    super('Attachment cancelled');
+    this.name = 'AttachmentCancelledError';
+  }
+}
+
 /**
  * Writes bytes to a path on a machine, transparently switching from the
  * normal single-RPC binary write to a chunked bash-based one once the file
  * is large enough to risk the relay's socket message cap (see
  * SINGLE_SHOT_MAX_BYTES above) — e.g. a PDF, where an image attachment
  * would usually stay under the fast single-shot path.
+ *
+ * `isCancelled` is polled BETWEEN chunk RPCs, which is the only honest
+ * granularity available: an in-flight socket.io emitWithAck can't be
+ * aborted, so "cancel" means "stop before sending the next chunk", not
+ * "kill the request already on the wire". A large file is hundreds of
+ * sequential chunks, so in practice that still lands quickly.
  */
 export async function writeAttachmentFile(
   runMachineBash: RunBash,
@@ -74,6 +88,7 @@ export async function writeAttachmentFile(
   platform: string,
   targetPath: string,
   bytes: Uint8Array,
+  isCancelled?: () => boolean,
 ): Promise<void> {
   if (bytes.byteLength <= SINGLE_SHOT_MAX_BYTES) {
     const result = await writeMachineBinaryFile(machineId, targetPath, bytes);
@@ -86,6 +101,7 @@ export async function writeAttachmentFile(
   const base64 = encodeBase64(bytes, 'base64');
 
   for (let offset = 0; offset < base64.length; offset += CHUNK_SIZE) {
+    if (isCancelled?.()) throw new AttachmentCancelledError();
     const chunk = base64.slice(offset, offset + CHUNK_SIZE);
     const command = isWindows ? windowsAppendCommand(chunk, tempPath, offset === 0) : posixAppendCommand(chunk, tempPath, offset === 0);
     const result = await runMachineBash(machineId, command);

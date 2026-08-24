@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { LuPlus } from 'react-icons/lu';
 import { useT } from '../lib/i18n';
 
 interface McpServerStatus {
@@ -49,8 +50,16 @@ export function ComposerPlusMenu({ slashCommands, mcpServers, onInsertSlashComma
 
   return (
     <div className="session-menu composer-plus" ref={rootRef}>
+      {/* An icon, not a literal "+" character: a text glyph in a <button>
+          picks up the UA stylesheet's own control font (Arial under
+          Chromium/WebView2, the system font under WebKit), so the "+"
+          rendered in a DIFFERENT font from the placeholder beside it — and
+          two fonts' optical centres don't line up, which is what read as
+          "the placeholder is vertically off" on Windows specifically.
+          An SVG has no font metrics and centres geometrically in the
+          flex box, identically on every platform. */}
       <button type="button" className="composer-plus-trigger" title={t('composerPlusTitle')} onClick={() => setOpen((v) => !v)}>
-        +
+        <LuPlus size={16} strokeWidth={2} />
       </button>
 
       {open && (
