@@ -46,6 +46,10 @@ objc2-foundation = "0.3"
 # app's own HWND as owner; see that file for why the webview's own copy
 # can't be used on Windows.
 [target.'cfg(target_os = "windows")'.dependencies]
+# Already in the tree transitively via tauri-runtime-wry, and it is the
+# exact crate Tauri's own PlatformWebview::controller() hands back, so the
+# interface types must come from here rather than a second binding crate.
+webview2-com = "0.38"
 windows = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_System_DataExchange",

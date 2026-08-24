@@ -10,6 +10,9 @@ mod macos_titlebar;
 #[cfg(target_os = "windows")]
 mod win_clipboard;
 
+#[cfg(target_os = "windows")]
+mod win_webview;
+
 struct TitlebarHeight(std::sync::Mutex<Option<f64>>);
 
 // Must match packages/happy-client/src/auth/credentials.ts exactly — both
@@ -179,9 +182,67 @@ fn copy_text_owned(window: tauri::WebviewWindow, text: String) -> Result<(), Str
     }
 }
 
+/// Blocks the webview from ever navigating away from the app's own pages,
+/// and hands any external URL to the OS browser instead.
+///
+/// Without this, clicking a link in an agent's markdown reply navigates
+/// the WEBVIEW ITSELF to that site — the app is simply replaced by a web
+/// page, with no back button and no way out short of restarting, since
+/// nothing here renders browser chrome. The frontend also overrides
+/// markdown's <a> rendering (see SessionTile.tsx) so the common case never
+/// reaches here; this is the backstop that also catches the cases an
+/// onClick handler can't, e.g. a JS-initiated location assignment, a
+/// form submit, or a target=_blank popup.
+///
+/// Allowed: the tauri:// custom protocol the bundled frontend is served
+/// from, and http://localhost during `tauri dev`. Everything else is
+/// refused and opened externally.
+fn navigation_guard<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    tauri::plugin::Builder::new("navigation-guard")
+        .on_navigation(|_webview, url| {
+            let is_app_page = match url.scheme() {
+                "tauri" | "asset" | "about" | "blob" | "data" => true,
+                // The dev server. cfg!(dev) is false in a release bundle,
+                // so a production build never trusts localhost.
+                "http" | "https" => cfg!(dev) && matches!(url.host_str(), Some("localhost") | Some("127.0.0.1")),
+                _ => false,
+            };
+            if is_app_page {
+                return true;
+            }
+            // Only hand the OS things it should actually open. Notably NOT
+            // file://, which would let a crafted link open arbitrary local
+            // paths in whatever app claims them.
+            if matches!(url.scheme(), "http" | "https" | "mailto") {
+                let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+            }
+            false
+        })
+        .build()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|_app| {
+            // Windows only: turn off WebView2's inherited Edge shortcuts
+            // (Ctrl+J downloads, Ctrl+P print, Ctrl+R/F5 reload, F12
+            // devtools) — see win_webview.rs. Runs after the window exists
+            // because it needs the live WebView2 controller.
+            #[cfg(target_os = "windows")]
+            {
+                use tauri::Manager;
+                if let Some(webview) = _app.get_webview_window("main") {
+                    let _ = webview.with_webview(|platform| {
+                        if let Err(error) = win_webview::disable_browser_shortcuts(&platform.controller()) {
+                            eprintln!("[win_webview] could not disable browser shortcuts: {error}");
+                        }
+                    });
+                }
+            }
+            Ok(())
+        })
+        .plugin(navigation_guard())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())

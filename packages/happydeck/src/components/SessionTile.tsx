@@ -9,6 +9,7 @@ import { attachDisconnectedError, attachmentWriteFailedError, cwdNotKnownError, 
 import { logError } from '../lib/errorLog';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
 import { type TranslationKey, useT } from '../lib/i18n';
+import { markdownComponents } from '../lib/markdownComponents';
 import { resolveOpenTerminalAction } from '../lib/openTerminal';
 import { explainResumeError } from '../lib/resumeError';
 import { deriveTitle } from '../lib/sessionTitle';
@@ -115,7 +116,7 @@ function TaskNotificationLine({ part }: { part: Extract<RenderablePart, { kind: 
       {expanded && part.body && (
         <div className="tile-tool-call-body">
           <div className="tile-message-markdown">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.body}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{part.body}</ReactMarkdown>
           </div>
         </div>
       )}
@@ -756,7 +757,7 @@ export function SessionTile({
             <div key={message.id} className={`message-row role-${role}`}>
               {part.kind === 'text' ? (
                 <div className="tile-message tile-message-markdown">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{part.text}</ReactMarkdown>
                 </div>
               ) : part.kind === 'tool-call' ? (
                 <ToolCallLine part={part} />
