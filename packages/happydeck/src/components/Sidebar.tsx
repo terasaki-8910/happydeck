@@ -7,9 +7,9 @@ import happydeckMarkLight from '../assets/happydeck-mark-light.svg';
 import { type LiveSession, useHappyStore } from '../store/happyStore';
 import { SESSION_DRAG_MIME } from '../lib/dnd';
 import { downloadTranscript } from '../lib/exportTranscript';
-import { messageRole, renderablePart } from '../lib/formatMessage';
 import { useT } from '../lib/i18n';
 import { resolveOpenTerminalAction } from '../lib/openTerminal';
+import { latestAgentText } from '../lib/latestAgentText';
 import { basename } from '../lib/paths';
 import { byRecency } from '../lib/sessionOrder';
 import { isSideChat } from '../lib/sessionIdentity';
@@ -67,17 +67,9 @@ function shortHost(host: string): string {
   return host.replace(/\.local$/i, '');
 }
 
+/** The sidebar's preview line: the agent's latest prose, or the directory name when it hasn't said anything yet. Shares latestAgentText with the notification body so the two can't drift apart. */
 function deriveStatusLine(session: LiveSession, path: string): string {
-  for (let i = session.messages.length - 1; i >= 0; i--) {
-    const message = session.messages[i];
-    if (messageRole(message.content) !== 'agent') continue;
-    const part = renderablePart(message.content);
-    if (part?.kind === 'text') {
-      const oneLine = part.text.trim().replace(/\s+/g, ' ');
-      return oneLine.length > 90 ? `${oneLine.slice(0, 90)}…` : oneLine;
-    }
-  }
-  return path;
+  return latestAgentText(session) ?? path;
 }
 
 interface SessionRowProps {

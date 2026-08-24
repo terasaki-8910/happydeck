@@ -55,7 +55,10 @@ import {
   unknownMachineError,
   unknownSessionError,
 } from '../lib/errorMessages';
+import { latestAgentText } from '../lib/latestAgentText';
 import { ensureNotificationPermission, notify } from '../lib/notifications';
+import { basename } from '../lib/paths';
+import { deriveTitle } from '../lib/sessionTitle';
 import { explainResumeError } from '../lib/resumeError';
 import { getLocalMachineId, getStoredCredentials } from '../lib/tauri';
 import { useSettingsStore } from './settingsStore';
@@ -68,11 +71,28 @@ const MOCK_ATTACHMENT_PNG = decodeBase64(
   'base64',
 );
 
-const SESSION_EVENT_TITLES: Record<string, string> = {
-  done: 'Session finished',
-  permission: 'Permission needed',
-  question: 'Question from agent',
-};
+/**
+ * How long to wait after a session-event before composing its
+ * notification, so the turn's final message has a chance to land first.
+ * See the notify() call site for the ordering evidence. Short enough not
+ * to feel laggy, long enough to cover the ~200-500ms skew observed
+ * between the two server paths.
+ */
+const NOTIFICATION_SETTLE_MS = 800;
+
+/** The " (done)" / " (needs approval)" tail appended to a session's own name in a notification title. */
+function sessionEventSuffix(language: 'en' | 'ja', kind: string): string {
+  if (language === 'ja') {
+    if (kind === 'done') return '（完了）';
+    if (kind === 'permission') return '（要承認）';
+    if (kind === 'question') return '（質問）';
+    return '';
+  }
+  if (kind === 'done') return ' (done)';
+  if (kind === 'permission') return ' (needs approval)';
+  if (kind === 'question') return ' (question)';
+  return '';
+}
 
 export type HappyStatus = 'idle' | 'linking-required' | 'loading' | 'ready' | 'error';
 
@@ -493,12 +513,38 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
             if (kind in notifyPrefs && !notifyPrefs[kind as keyof typeof notifyPrefs]) {
               return;
             }
-            const session = get().sessions.find((s) => s.id === sessionId);
-            const metadata = session?.metadata as { path?: string; host?: string } | null;
-            const label = metadata?.host ? `${metadata.host}: ${metadata.path ?? sessionId}` : (metadata?.path ?? sessionId);
-            const title = (ephemeral.title as string | undefined) || SESSION_EVENT_TITLES[kind] || kind;
-            const body = (ephemeral.body as string | undefined) || label;
-            notify(title, body);
+            // The event and the agent's final message arrive over two
+            // INDEPENDENT server paths (push-event vs the message socket),
+            // so their order is not guaranteed — confirmed in real logs,
+            // where 'done' beat the final message by ~200ms in one capture
+            // and trailed it by ~500ms in another. Reading "the latest
+            // agent text" the instant the event lands would therefore
+            // sometimes summarise the PREVIOUS turn, i.e. state something
+            // confidently wrong. Waiting a beat and re-reading costs a
+            // barely-perceptible delay and removes that whole class of
+            // error.
+            //
+            // Deliberately NOT using the server's own title/body any more:
+            // ephemeral.title is a fixed string baked into happy-cli
+            // ("It's ready!" / "Permission request" / "Clarification
+            // needed") and ephemeral.body is only the session title, so
+            // neither says anything about what actually happened. Anything
+            // informative has to be composed here.
+            window.setTimeout(() => {
+              const session = get().sessions.find((s) => s.id === sessionId);
+              const metadata = session?.metadata as { path?: string; host?: string } | null;
+              const fallbackLabel = metadata?.host ? `${metadata.host}: ${metadata.path ?? sessionId}` : (metadata?.path ?? sessionId);
+              const language = useSettingsStore.getState().language;
+
+              const sessionName = session ? (deriveTitle(session.metadata, session.messages) ?? basename(metadata?.path ?? sessionId)) : fallbackLabel;
+              const title = `${sessionName}${sessionEventSuffix(language, kind)}`;
+              // Latest agent prose is the only thing here that describes
+              // the turn; fall back to where it happened when the session
+              // has no prose yet (a tool-calls-only turn, or a brand new
+              // session).
+              const body = (session && latestAgentText(session)) ?? fallbackLabel;
+              notify(title, body);
+            }, NOTIFICATION_SETTLE_MS);
           }
         },
       });
