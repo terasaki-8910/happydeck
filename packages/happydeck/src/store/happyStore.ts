@@ -543,7 +543,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
               // has no prose yet (a tool-calls-only turn, or a brand new
               // session).
               const body = (session && latestAgentText(session)) ?? fallbackLabel;
-              notify(title, body);
+              notify(title, body, sessionId);
             }, NOTIFICATION_SETTLE_MS);
           }
         },

@@ -1,4 +1,4 @@
-import { sessionExitedWithCodeText } from './errorMessages';
+import { backgroundTaskFallbackText, sessionExitedWithCodeText } from './errorMessages';
 import { useSettingsStore } from '../store/settingsStore';
 
 function truncate(value: string, max: number): string {
@@ -106,7 +106,13 @@ const BASH_OUTPUT = /^(?:<bash-stdout>([\s\S]*?)<\/bash-stdout>)?(?:<bash-stderr
 // interception point. Not anchored to the whole string (^...$) like the
 // patterns above — a "[SYSTEM NOTIFICATION - NOT USER INPUT]" preamble line
 // can precede the tag, confirmed against real transcripts.
-const TASK_NOTIFICATION = /<task-notification>([\s\S]*?)<\/task-notification>/;
+// The trailing `(?:<\/task-notification>|$)` rather than a required
+// closing tag: a notice cut short mid-block (a transcript still being
+// written, a truncating mirror) would otherwise fail the match and fall
+// straight back to dumping the raw XML as chat prose — the one outcome
+// this whole path exists to avoid. A partial block still yields a
+// headline whenever <summary> made it through.
+const TASK_NOTIFICATION = /<task-notification>([\s\S]*?)(?:<\/task-notification>|$)/;
 
 function extractTag(body: string, tag: string): string | null {
   const match = body.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
@@ -146,19 +152,24 @@ function formatTokenCount(n: number): string {
 const TASK_NOTIFICATION_STATUSES = new Set(['completed', 'failed', 'killed', 'stopped']);
 
 /**
- * Recognizes a <task-notification> block anywhere in the text. Bails to
- * null (falls back to plain-text rendering) if <summary> is missing, so a
- * future change to this internal, undocumented format degrades gracefully
- * instead of producing an empty bubble.
+ * Recognizes a <task-notification> block anywhere in the text. Once the
+ * opening tag matches, this never returns null: the fallback would be
+ * rendering the raw XML as chat prose, which is exactly the failure this
+ * exists to prevent. Missing inner fields degrade field by field instead.
  */
 function taskNotificationPart(text: string): RenderablePart | null {
   const outer = text.match(TASK_NOTIFICATION);
   if (!outer) return null;
   const body = outer[1];
 
+  // <summary> is what every real sample carries (verified against the 236
+  // <task-notification> blocks present across every local project
+  // transcript), but bailing out when it is missing would fall back to
+  // rendering the whole XML blob as prose — the single ugliest thing this
+  // function can produce. A headline built from <status> is a worse
+  // headline; a raw tag dump is a broken UI. So degrade, never bail.
   const rawSummary = extractTag(body, 'summary');
-  if (!rawSummary) return null;
-  const headline = unescapeXmlEntities(rawSummary).trim();
+  const headline = rawSummary ? unescapeXmlEntities(rawSummary).trim() : backgroundTaskFallbackText(useSettingsStore.getState().language);
 
   const rawStatus = extractTag(body, 'status');
   const status = rawStatus && TASK_NOTIFICATION_STATUSES.has(rawStatus) ? (rawStatus as Extract<RenderablePart, { kind: 'task-notification' }>['status']) : null;

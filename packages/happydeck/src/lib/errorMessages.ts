@@ -15,6 +15,11 @@ export function sessionExitedWithCodeText(language: Language, code: number): str
   return language === 'ja' ? `セッションが終了しました（コード ${code}）` : `Session exited (code ${code})`;
 }
 
+/** Headline for a background-task notice whose own <summary> is missing — see formatMessage.ts's taskNotificationPart. */
+export function backgroundTaskFallbackText(language: Language): string {
+  return language === 'ja' ? 'バックグラウンドタスク' : 'Background task';
+}
+
 export function notConnectedError(language: Language): string {
   return language === 'ja' ? 'サーバーに接続されていません' : 'Not connected';
 }

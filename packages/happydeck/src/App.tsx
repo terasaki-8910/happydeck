@@ -19,6 +19,7 @@ import { deriveTitle } from './lib/sessionTitle';
 import { bootstrapFailedError } from './lib/errorMessages';
 import { installWindowsClipboardFix } from './lib/winClipboard';
 import { installZoomHotkeys } from './lib/zoomHotkeys';
+import { listen } from '@tauri-apps/api/event';
 import { useHappyStore } from './store/happyStore';
 import { FONT_STACKS, useSettingsStore } from './store/settingsStore';
 import { useViewStore } from './store/viewStore';
@@ -143,6 +144,34 @@ function App() {
 
   useEffect(() => installZoomHotkeys(), []);
   useEffect(() => installWindowsClipboardFix(), []);
+
+  // A click on a desktop notification opens the session it was about. The
+  // event is emitted from src-tauri/src/notification.rs (the Tauri
+  // notification plugin cannot report clicks on desktop at all -- see that
+  // file). Window focus/raise is already done Rust-side; this only has to
+  // decide what the window shows, and get any modal out of the way so the
+  // session is actually the thing on screen.
+  useEffect(() => {
+    let dispose: (() => void) | null = null;
+    let cancelled = false;
+    listen<string>('notification-activated', (event) => {
+      focusSession(event.payload);
+      setSettingsOpen(false);
+      setSearchOpen(false);
+    }).then(
+      (unlisten) => {
+        if (cancelled) unlisten();
+        else dispose = unlisten;
+      },
+      // Mock/browser runs have no Tauri event bridge; notifications do not
+      // exist there either, so there is nothing to degrade.
+      (error) => console.warn('[notifications] click listener unavailable:', error),
+    );
+    return () => {
+      cancelled = true;
+      dispose?.();
+    };
+  }, [focusSession, setSettingsOpen, setSearchOpen]);
 
   // Land on the most-recently-active session's panes view by default, once —
   // this never runs again after the user (or a tab click) picks a view.

@@ -4,6 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
 
+mod notification;
+
 #[cfg(target_os = "macos")]
 mod macos_titlebar;
 
@@ -255,7 +257,8 @@ pub fn run() {
             position_traffic_lights,
             read_app_config_file,
             write_app_config_file,
-            copy_text_owned
+            copy_text_owned,
+            notification::notify_session
         ])
         .on_window_event(|window, event| {
             // Re-anchor to the window's new frame on every resize (a fixed
