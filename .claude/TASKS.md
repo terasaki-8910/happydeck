@@ -172,3 +172,28 @@ living in chat history, so they don't get lost.
   Release infrastructure itself is already working: `.github/workflows/release.yml`
   builds macOS (arm64) / Windows / Linux on a `happydeck-v*` tag push and
   uploads to a DRAFT GitHub release.
+
+## Windows-only verification backlog (happydeck)
+
+Everything below is written and type-checks against `x86_64-pc-windows-msvc`,
+but has only ever run on macOS. None of it can be verified from this Mac.
+
+- **Clickable notifications** (`src-tauri/src/notification.rs`). Needs an
+  *installed* build, not `cargo run`: a toast is rejected outright unless
+  its AppUserModelID matches a Start-menu shortcut the NSIS installer
+  created, so `notify_session` deliberately omits `app_id` when running out
+  of `target/debug|release`. Check (a) the toast appears at all, (b)
+  clicking its body raises the window and opens that session. Known
+  limitation, not a bug: activation only fires while the app is running and
+  the toast is still on screen — a click from Action Center needs a COM
+  activator, deliberately out of scope.
+- Clipboard-history workaround (`win_clipboard.rs`), Ctrl+J/Ctrl+P/F12
+  accelerator disable (`win_webview.rs`), composer placeholder alignment,
+  `<task-notification>` row rendering, base64 attachment fix. All shipped
+  unverified on Windows.
+
+macOS side of clickable notifications is also unverified end-to-end: an
+unbundled probe returned `Closed(Expired)` ~175ms after delivery (the
+notification never reaches `deliveredNotifications` for a process without
+its own bundle), so the click path can only be confirmed from the installed
+app by actually clicking one.
