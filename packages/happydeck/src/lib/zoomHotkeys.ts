@@ -12,6 +12,12 @@
  * guessing. tauri.conf.json keeps zoomHotkeysEnabled: false so that
  * built-in handler never fires in parallel with this one.
  *
+ * `code` alone isn't sufficient either, though: it identifies a physical
+ * key POSITION, and "+" lives in different positions on different
+ * layouts (ANSI top row = Equal, JIS = Semicolon, numeric keypad =
+ * NumpadAdd). See ZOOM_IN_CODES below — matching only 'Equal' left
+ * Ctrl++ completely dead on a Japanese Windows keyboard.
+ *
  * Zoom is applied via CSS `zoom` on the document root, NOT Tauri's
  * getCurrentWebview().setZoom() (WKWebView's `pageZoom`). Confirmed live:
  * at a non-1.0 pageZoom the composer's focused textarea rendered a
@@ -52,11 +58,29 @@ export function installZoomHotkeys(): () => void {
 
   applyZoom(DEFAULT_ZOOM);
 
+  // Matching on `code` (physical key) is what makes this layout-independent
+  // — but a physical key only covers the positions that EXIST on a given
+  // layout, so several real ways to type "+"/"-" need listing explicitly:
+  //   - Equal/Minus/Digit0: the ANSI top-row keys (Ctrl/Cmd + "+" there is
+  //     really Shift+Equal, which still reports code 'Equal').
+  //   - NumpadAdd/NumpadSubtract/Numpad0: the numeric keypad, a completely
+  //     separate set of codes. Ctrl+Numpad-+ is a standard zoom gesture on
+  //     Windows and was silently dead here.
+  //   - Semicolon: on a JIS layout "+" is Shift+; — the physical key sits
+  //     where ANSI has ';', so it reports code 'Semicolon', never 'Equal'.
+  //     Without this, Ctrl++ does nothing at all on a Japanese Windows
+  //     keyboard (the reported bug).
+  // IntlRo/IntlYen are deliberately NOT bound: they're JIS-only keys that
+  // don't carry +/- and binding them would steal real characters.
+  const ZOOM_IN_CODES = new Set(['Equal', 'NumpadAdd', 'Semicolon']);
+  const ZOOM_OUT_CODES = new Set(['Minus', 'NumpadSubtract']);
+  const ZOOM_RESET_CODES = new Set(['Digit0', 'Numpad0']);
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (isMac ? !event.metaKey : !event.ctrlKey) return;
-    if (event.code === 'Equal') applyZoom(zoomLevel + ZOOM_STEP);
-    else if (event.code === 'Minus') applyZoom(zoomLevel - ZOOM_STEP);
-    else if (event.code === 'Digit0') applyZoom(DEFAULT_ZOOM);
+    if (ZOOM_IN_CODES.has(event.code)) applyZoom(zoomLevel + ZOOM_STEP);
+    else if (ZOOM_OUT_CODES.has(event.code)) applyZoom(zoomLevel - ZOOM_STEP);
+    else if (ZOOM_RESET_CODES.has(event.code)) applyZoom(DEFAULT_ZOOM);
     else return;
     event.preventDefault();
   };

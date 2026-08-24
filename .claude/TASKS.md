@@ -19,3 +19,124 @@ living in chat history, so they don't get lost.
   relative to what was reviewed. May share a root cause with the
   local-mode-only "done" notification gap (see happydeck's own commit
   history / conversation around 2026-08-19) — worth checking both together.
+
+- **happy-cli SESSION_SCANNER permanently drops a session if its Claude
+  Code transcript file doesn't appear within 60s of watch start** (2026-08-23):
+  root-caused via live log correlation (`~/.happy/logs`, pid 49628,
+  session `cd0a5f43-...`) — `startFileWatcher()`/`createSessionScanner()`
+  in the installed `happy` 1.2.0 bundle (`/opt/homebrew/lib/node_modules/happy/dist/index-BmZ4or3w.mjs:729-928`)
+  give up permanently ("transcript never appeared — dropping it") if the
+  file isn't found within a hardcoded 60s, with no code path to re-arm
+  later even once the file does appear. On a machine that's slow to start
+  Claude Code (this user routinely runs 5-10+ concurrent sessions), this
+  silently means the ENTIRE conversation history for that session never
+  reaches happydeck (or any other Happy client) — the session shows "no
+  messages" forever even though the local transcript has hundreds of real
+  lines. happydeck cannot fix this itself (the bug is in a separate
+  process's local file-watching logic, on whichever machine hit it) —
+  only a mitigation (detect the "has a title but zero messages" mismatch
+  and suggest `happy --continue`) is possible from happydeck's side.
+  **Already a known upstream bug**: filed as slopus/happy#1538, with an
+  unreviewed fix already open as slopus/happy#1638 (fork
+  `leikaiwei/happy@pr/transcript-watcher` commit `40c79149`, ~3 weeks
+  stale, 0 CI runs recorded). A full fork/patch plan was drafted
+  (directory-watch + 2s-poll race instead of a hard file-watch timeout,
+  recommended distribution as a parallel-aliased global install e.g.
+  `happy-patched` rather than hand-editing the installed dist file, which
+  `npm update -g happy` would silently revert) but explicitly deferred by
+  the user for now ("今は保留") — pending because it would need
+  independent rollout+maintenance on every machine that should benefit
+  (this Mac, omen6, ...), not just one. Also found a second, narrower gap
+  PR #1638 does NOT cover: `claudeLocalLauncher.ts`'s `finally` block
+  unconditionally calls `scanner.cleanup()` even when the local→remote
+  mode switch itself is what ended the local launcher, discarding the
+  scanner (and any not-yet-uploaded history) with no log line at all —
+  worth folding into the same fork effort if/when it's picked back up.
+
+- **Terminal mode (PTY pane inside happydeck)** — design settled, implementation
+  deferred (2026-08-23, user: "一旦ターミナル設計は、タスクに置いておいて…今は保留").
+  Research + spikes are DONE; picking this back up should not need re-research.
+
+  **Verdict: GO.** The one blocking risk (Japanese IME breaking Ctrl+C) was
+  spike-tested on a real Tauri/WKWebView window and passed — with the IME on
+  but no active composition, Ctrl+C reports keyCode 67 and reaches the shell
+  (`^C` confirmed interrupting a `sleep`). Mid-composition keys go to the IME,
+  which is correct behavior; Escape/backspace cancels composition first.
+
+  **Decisions already made (points 1-3 of 5):**
+  1. *Pane identity* — namespaced id `term:<uuid>` flowing through the existing
+     paneTree/viewStore machinery unchanged. `PaneLeaf` stays `sessionId: string`;
+     only `App.tsx`'s `renderLeaf()` branches on the prefix. (Rejected: a proper
+     discriminated-union `PaneLeaf`, which ripples through all of paneTree.ts,
+     viewStore, Sidebar's drag payload, `activePaneSessionId`, and needs a
+     persisted-layout migration.)
+  2. *Relationship to sessions* — a terminal is opened FROM a session and
+     inherits that session's `cwd` + `machineId`. Not an independent terminal.
+     (Known gap: with zero sessions you can't open one; extend to a standalone
+     entry point later if that bites.)
+  3. *Remote machines* — no new protocol. Run the exact `ssh -t <target> 'cd
+     ... && exec $SHELL -l'` string `buildShellCommand()` (src/lib/openTerminal.ts)
+     already builds for the existing Terminal.app "Open in Terminal" action,
+     just inside a local PTY. Reuses `sshTargets`, ~/.ssh/config, ssh-agent,
+     ProxyJump for free. (Rejected: russh — `russh-config` can't parse
+     Include/Match so Host aliases break; and tunnelling a PTY over the Happy
+     relay — its RPC set is 18 fixed request/response methods, no byte stream,
+     would need forking happy-cli AND happy-server.)
+
+  **Point 4 (persistence) — recommended but NOT yet confirmed by the user:**
+  no persistence (PTY is a plain child of happydeck; dies with the app), PLUS a
+  confirm-before-close warning when a pane's foreground process isn't just the
+  shell. Reuses the existing `ConfirmDialog.tsx` (already used by BulkKillMenu;
+  exists because native `confirm()` doesn't render reliably in this webview).
+  Note there is NO app-quit/window-close confirmation anywhere in the app today
+  — this would be the first, and it matters because nothing in happydeck can
+  currently kill a user's real process on quit (sessions live on their own
+  daemon). Rejected: tmux-backing (not preinstalled on macOS/Ubuntu/Fedora, no
+  Windows story, `new-session -A` can't distinguish detach from session-end via
+  exit code so it needs a real state machine — and no mainstream app does this
+  by default; only iTerm2, opt-in). Rejected: pane-lifetime-scoped (needs a
+  brand-new "leaf left the tree" diffing mechanism — paneTree's mutators are
+  pure and hookless, `replaceLeaf`/`showGrid` also silently drop leaves — and
+  it would break the existing precedent that closing a session's pane never
+  kills the session).
+
+  **Point 5 (launch trigger) — scouted, not yet decided:** add "Open terminal
+  here" immediately after the existing "Open in Terminal" item, before the
+  divider, in BOTH menus — `SessionMenu.tsx:243-248` (sidebar row) and
+  `TileActionsMenu.tsx:96-108` (tile header). Both menus share the same
+  structure: lifecycle actions → divider → destructive actions. Plumbing gap to
+  close first: neither menu component imports `useViewStore`, so the pane-add
+  action must be threaded down as a prop — exactly the shape `onClosePane`
+  already uses (`App.tsx:296`, built from `removePane` at `App.tsx:86`).
+
+  **Implementation constraints confirmed by spike (do not re-derive):**
+  - Rust: `portable-pty` 0.9.0. MUST drop `pair.slave` after spawn or the
+    master never sees EOF and blocks forever. Reads aren't cancellable → one
+    dedicated OS thread per session + a channel. Rejected `tauri-plugin-shell`
+    (no PTY at all, `isatty()` false) and `tauri-plugin-pty` (IPC-polling read
+    loop holding a Mutex across blocking I/O — one session permanently occupies
+    a tokio worker, so multi-pane starves the runtime).
+  - `#[tauri::command]`s written directly in lib.rs need NO capabilities entry
+    (the app's existing commands aren't listed in capabilities/default.json).
+  - Frontend: `@xterm/xterm` 6.0.0 stable + `@xterm/addon-fit`, **DOM renderer**
+    — not WebGL (WKWebView row-ghosting, xterm#5847) and the canvas addon was
+    removed in 6.0. Mount manually with useRef/useEffect; dispose+recreate per
+    mount (StrictMode double-`.open()` breaks, xterm#4978).
+  - **Do NOT apply the app's CSS `zoom` to the terminal pane.** Measured: xterm
+    sizes cells from `offsetWidth` (zoom-immune) but maps pointers via
+    `getBoundingClientRect()` (zoom-scaled), so at the app's default 1.1 the
+    click-to-cell mapping drifts — 7 columns off by column 61. Change fontSize
+    instead.
+  - Do NOT enable the kitty keyboard protocol (opt-in in the beta, absent in
+    6.0.0) — it breaks single-char IME confirmation (xterm#6112).
+  - `Cmd+F` is already globally captured at `App.tsx:134` and will collide with
+    xterm's own search addon.
+  - Finder-launched `.app` inherits launchd's minimal PATH — spawn via
+    `$SHELL -l -c` or inject PATH explicitly, or `claude`/node/Homebrew won't
+    be found.
+  - Known unknown, worth an early check: whether Tauri's `Channel` payload for
+    raw bytes arrives as ArrayBuffer or Array in the pinned version (a breaking
+    change exists in that area) — measure rather than assume.
+
+  Throwaway IME spike lives at (scratch, may be GC'd):
+  `/private/tmp/claude-501/-Users-masa669-Documents-project-multiMonitor/dcfb0aef-12de-442f-864f-cdc086c9d10d/scratchpad/xterm-ime-spike/`
