@@ -197,15 +197,29 @@ fn copy_text_owned(window: tauri::WebviewWindow, text: String) -> Result<(), Str
 /// form submit, or a target=_blank popup.
 ///
 /// Allowed: the tauri:// custom protocol the bundled frontend is served
-/// from, and http://localhost during `tauri dev`. Everything else is
-/// refused and opened externally.
+/// from on macOS/Linux, the http://tauri.localhost virtual host it's
+/// served from on Windows/Android, and http://localhost during
+/// `tauri dev`. Everything else is refused and opened externally.
 fn navigation_guard<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("navigation-guard")
         .on_navigation(|_webview, url| {
             let is_app_page = match url.scheme() {
                 "tauri" | "asset" | "about" | "blob" | "data" => true,
+                // WebView2 has no custom-scheme support, so on
+                // Windows/Android Tauri serves the bundled frontend from
+                // this fixed virtual host instead of tauri:// — confirmed
+                // in wry's webview2 backend, and unaffected by `useHttpsScheme`
+                // (this project doesn't set it, so it's `http`, not `https`).
+                // This is the app's OWN first navigation on every Windows
+                // launch, not a dev convenience: refusing it here — as a
+                // previous version of this guard did — left the window
+                // permanently blank and unresponsive, with the refused URL
+                // handed to the OS browser instead (which can't resolve a
+                // `.localhost` virtual host outside this app's own webview).
+                // Trusted unconditionally, not just in `cfg!(dev)`.
+                "http" | "https" if url.host_str() == Some("tauri.localhost") => true,
                 // The dev server. cfg!(dev) is false in a release bundle,
-                // so a production build never trusts localhost.
+                // so a production build never trusts plain localhost.
                 "http" | "https" => cfg!(dev) && matches!(url.host_str(), Some("localhost") | Some("127.0.0.1")),
                 _ => false,
             };
