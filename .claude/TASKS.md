@@ -140,3 +140,35 @@ living in chat history, so they don't get lost.
 
   Throwaway IME spike lives at (scratch, may be GC'd):
   `/private/tmp/claude-501/-Users-masa669-Documents-project-multiMonitor/dcfb0aef-12de-442f-864f-cdc086c9d10d/scratchpad/xterm-ime-spike/`
+
+- **Code signing / notarization for distributable releases** (2026-08-24,
+  user: "将来的に対応したい" — deferred, not blocking self-use).
+  Releases currently ship UNSIGNED on all three platforms, which is fine
+  while the only consumer is this user's own machines but is a poor
+  experience for anyone else:
+  - **macOS**: Gatekeeper blocks an unsigned/un-notarized `.app` outright.
+    Recipients must right-click → Open, or `xattr -cr` it by hand — the
+    same manual step `scripts/build-install-launch.sh` already automates
+    for local installs. Fixing properly needs an Apple Developer Program
+    membership (~$99/yr) for a Developer ID Application certificate, plus
+    notarization (submit to Apple, staple the ticket). tauri-action reads
+    `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
+    `APPLE_ID`, `APPLE_PASSWORD` (app-specific), `APPLE_TEAM_ID` from repo
+    secrets — no workflow restructuring needed, just the secrets and the
+    cert.
+  - **Windows**: unsigned `.exe` triggers a SmartScreen warning. Needs an
+    Authenticode cert; an OV cert is cheaper but still accrues SmartScreen
+    reputation slowly, an EV cert avoids the warning immediately but is
+    more expensive and usually hardware-token-bound (awkward in CI —
+    cloud-signing services like Azure Trusted Signing exist for this).
+  - **Linux**: AppImage needs nothing equivalent.
+  Also unconfigured and worth deciding at the same time: the **Tauri
+  updater** (`tauri.conf.json` has no `plugins.updater` block), so today
+  updating means manually re-downloading. The updater REQUIRES signing keys
+  of its own (`tauri signer generate`, then `TAURI_SIGNING_PRIVATE_KEY` in
+  CI) — independent of the OS-level code signing above, so it can be added
+  first if auto-update matters more than the Gatekeeper/SmartScreen
+  warnings.
+  Release infrastructure itself is already working: `.github/workflows/release.yml`
+  builds macOS (arm64) / Windows / Linux on a `happydeck-v*` tag push and
+  uploads to a DRAFT GitHub release.
