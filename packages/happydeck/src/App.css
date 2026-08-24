@@ -1470,11 +1470,40 @@ body {
 }
 
 .tile-action-error {
-  margin: 0;
   padding: 6px 12px;
   font-size: 11px;
   color: var(--danger);
   flex-shrink: 0;
+}
+
+.tile-action-error-message {
+  margin: 0;
+}
+
+/* Raw technical text: present, but visibly secondary to the sentence
+   above it, and collapsed until asked for. */
+.tile-action-error-details {
+  margin-top: 4px;
+  color: var(--text-faint);
+}
+
+.tile-action-error-details summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.tile-action-error-details pre {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  max-height: 140px;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .tile-messages {

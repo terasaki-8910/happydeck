@@ -54,10 +54,30 @@ export function unknownAttachMachineError(language: Language, host: string): str
     : `Unknown machine for this session (${host}) — can't tell how to create a directory there.`;
 }
 
-export function attachmentWriteFailedError(language: Language, detail: string): string {
+/** Summary only — the raw failure text rides along as DetailedError's `detail`, so it can be shown on demand instead of inline. */
+export function attachmentWriteFailedError(language: Language, host: string): string {
   return language === 'ja'
-    ? `ファイルの添付に失敗しました（内容ではなく、書き込み処理自体の問題です）: ${detail}`
-    : `Failed to attach the file (a problem writing it, not with the file itself): ${detail}`;
+    ? `ファイルの添付に失敗しました。${host} 側でファイルを書き込む処理が失敗しています（ファイルの内容の問題ではありません）。`
+    : `Couldn't attach the file. Writing it on ${host} failed — this is about the transfer, not the file's contents.`;
+}
+
+/**
+ * A command sent to the session's machine came back rejected by that
+ * machine's own shell. Overwhelmingly this means the two ends disagree
+ * about what the command should look like — i.e. happydeck here is older
+ * or newer than the build that machine expects — so the actionable advice
+ * is to line the versions up, not to inspect the shell error.
+ */
+export function attachmentCommandRejectedError(language: Language, host: string): string {
+  return language === 'ja'
+    ? `ファイルの添付に失敗しました。${host} 側のシェルがコマンドを受け付けませんでした。happydeck のバージョンが古い可能性があるため、両方のマシンで最新版に更新してから再度お試しください。`
+    : `Couldn't attach the file — the shell on ${host} rejected the command. This usually means happydeck is out of date; update it on both machines and try again.`;
+}
+
+export function attachmentTimedOutError(language: Language, host: string): string {
+  return language === 'ja'
+    ? `ファイルの添付がタイムアウトしました。${host} からの応答がありません。接続状況を確認してから再度お試しください。`
+    : `Attaching the file timed out — ${host} stopped responding. Check that machine's connection and try again.`;
 }
 
 export function attachDisconnectedError(language: Language, host: string): string {

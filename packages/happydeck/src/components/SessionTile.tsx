@@ -5,7 +5,15 @@ import remarkGfm from 'remark-gfm';
 import { buildAttachmentDir, buildAttachmentPath, extensionForMimeType, relativeAttachmentPath } from '../lib/attachments';
 import { AttachmentCancelledError, writeAttachmentFile } from '../lib/chunkedFileWrite';
 import { downloadTranscript } from '../lib/exportTranscript';
-import { attachDisconnectedError, attachmentWriteFailedError, cwdNotKnownError, unknownAttachMachineError } from '../lib/errorMessages';
+import { DetailedError, splitError } from '../lib/detailedError';
+import {
+  attachDisconnectedError,
+  attachmentCommandRejectedError,
+  attachmentTimedOutError,
+  attachmentWriteFailedError,
+  cwdNotKnownError,
+  unknownAttachMachineError,
+} from '../lib/errorMessages';
 import { logError } from '../lib/errorLog';
 import { messageRole, type RenderablePart, renderablePart } from '../lib/formatMessage';
 import { type TranslationKey, useT } from '../lib/i18n';
@@ -219,7 +227,7 @@ export function SessionTile({
   // text 5 times in a row. A plain ref updates immediately, so this closes
   // the race the state-only guard couldn't.
   const sendingRef = useRef(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ message: string; detail?: string } | null>(null);
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [slashHighlight, setSlashHighlight] = useState(0);
@@ -309,7 +317,7 @@ export function SessionTile({
     try {
       await loadOlderMessages(session.id);
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error));
+      setActionError(splitError(error));
     } finally {
       setLoadingOlder(false);
     }
@@ -378,7 +386,7 @@ export function SessionTile({
       // the in-app error banner can only ever show a short summary (see
       // attachmentWriteFailedError for why that's not enough on its own).
       logError('runAction', error);
-      setActionError(error instanceof Error ? error.message : String(error));
+      setActionError(splitError(error));
     } finally {
       setBusy(false);
     }
@@ -457,7 +465,22 @@ export function SessionTile({
       // thing shown to the user with no context for what was happening.
       const detail = error instanceof Error ? error.message : String(error);
       logError('attachFiles', error);
-      throw new Error(attachmentWriteFailedError(language, detail));
+      const host = metadata.host ?? machineId;
+      // Pick the most specific summary the raw text supports. Everything
+      // unrecognised falls back to the generic "the write failed" line —
+      // the raw text is still one click away either way, so guessing
+      // wrong here costs nothing but a slightly vaguer sentence.
+      let summary: string;
+      if (/timed out/i.test(detail)) {
+        summary = attachmentTimedOutError(language, host);
+      } else if (/usage:|invalid argument|unrecognized option|not recognized as an internal/i.test(detail)) {
+        // The remote shell printed its own usage/complaint rather than
+        // running the command — see attachmentCommandRejectedError.
+        summary = attachmentCommandRejectedError(language, host);
+      } else {
+        summary = attachmentWriteFailedError(language, host);
+      }
+      throw new DetailedError(summary, detail);
     } finally {
       setAttaching(false);
     }
@@ -723,7 +746,20 @@ export function SessionTile({
         </div>
       )}
 
-      {actionError && <p className="tile-action-error">{actionError}</p>}
+      {actionError && (
+        <div className="tile-action-error">
+          <p className="tile-action-error-message">{actionError.message}</p>
+          {/* Raw technical text stays available but out of the way — it
+              used to be concatenated into the sentence above, which meant
+              a remote shell's usage dump buried the one actionable line. */}
+          {actionError.detail && (
+            <details className="tile-action-error-details">
+              <summary>{t('showDetails')}</summary>
+              <pre>{actionError.detail}</pre>
+            </details>
+          )}
+        </div>
+      )}
 
       <div className="tile-messages" ref={messagesRef} onScroll={handleMessagesScroll}>
         {session.hasMoreMessages && (
