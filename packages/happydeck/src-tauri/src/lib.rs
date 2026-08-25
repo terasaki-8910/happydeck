@@ -275,10 +275,25 @@ pub fn run() {
             notification::notify_session
         ])
         .on_window_event(|window, event| {
-            // Re-anchor to the window's new frame on every resize (a fixed
-            // titlebar height still needs a different absolute button
-            // position once the window itself is taller or shorter).
-            if let tauri::WindowEvent::Resized(_) = event {
+            // Re-anchor on both resize AND focus change. Resize is the
+            // obvious one (a fixed titlebar height still needs a different
+            // absolute button position once the window itself is taller or
+            // shorter). Focus is defensive redundancy alongside
+            // macos_titlebar.rs's own NSViewFrameDidChangeNotification
+            // observer, which is the thing actually responsible for
+            // catching a key-window-transition-triggered layout change, if
+            // one occurs -- direct NSView property reads taken at real
+            // key/resign transitions (hidden, alphaValue, frame, z-order)
+            // showed no difference at all between states, so "AppKit
+            // resets the container's frame on key-status change" -- the
+            // theory an earlier version of this comment stated as
+            // established fact -- is NOT confirmed, and the buttons
+            // disappearing when the window isn't key remains unexplained
+            // at the geometry/visibility-property level. See
+            // ~/Library/Logs/happydeck/titlebar-debug.log (HAPPYDECK_TITLEBAR_DEBUG=1)
+            // for the instrumentation this was checked with.
+            let should_reanchor = matches!(event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(_));
+            if should_reanchor {
                 #[cfg(target_os = "macos")]
                 {
                     let height = *window.state::<TitlebarHeight>().0.lock().unwrap();

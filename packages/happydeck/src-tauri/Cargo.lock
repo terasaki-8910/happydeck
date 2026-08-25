@@ -1478,6 +1478,7 @@ dependencies = [
 name = "happydeck"
 version = "0.3.1"
 dependencies = [
+ "block2",
  "keyring",
  "notify-rust",
  "objc2",

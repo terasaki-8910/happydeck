@@ -44,6 +44,13 @@ tauri-plugin-fs = "2"
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
+# Already resolved to 0.6.2 transitively (objc2-app-kit/objc2-foundation's
+# own "block2" feature, which their locked build already has on -- see
+# NSAnimationContext's runAnimationGroup: methods, gated on the same
+# feature, which this crate already relied on before this change). Needed
+# directly here for the block-based NSNotificationCenter observer in
+# macos_titlebar.rs.
+block2 = "0.6"
 
 # Already resolved to 0.61.3 transitively in Cargo.lock, so pinning the
 # same major.minor adds no new crate to the build -- only the extra
