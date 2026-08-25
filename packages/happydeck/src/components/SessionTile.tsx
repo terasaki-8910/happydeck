@@ -184,6 +184,10 @@ function ToolCallGroup({ entries }: { entries: MessageEntry[] }) {
   );
 }
 
+// See lastCompositionEndAtRef's own comment (inside SessionTile) for why
+// this grace window exists at all.
+const COMPOSITION_GRACE_MS = 50;
+
 export function SessionTile({
   session,
   workspaces,
@@ -227,6 +231,24 @@ export function SessionTile({
   // text 5 times in a row. A plain ref updates immediately, so this closes
   // the race the state-only guard couldn't.
   const sendingRef = useRef(false);
+  // What submitDraft last sent, so pressing Stop can hand it back — Claude
+  // Desktop's own stop control doesn't do this, but losing the prompt you
+  // were mid-edit on when you only meant to interrupt a bad response was
+  // the actual complaint. Cleared once restored so a second Stop (on a
+  // later message) doesn't hand back stale text, and never overwrites
+  // anything the user has already started typing since sending.
+  const lastSentDraftRef = useRef<string | null>(null);
+  // Belt-and-suspenders behind the isComposing/keyCode===229 checks in
+  // handleComposerKeyDown below: those catch the documented WebKit case
+  // where compositionend fires before the confirming Enter's keydown but
+  // that keydown still carries keyCode 229. Other editors (e.g.
+  // slab/quill#4134, still open) report a rarer WebKit variant where the
+  // event around composition-end carries NEITHER signal — indistinguishable
+  // from a real keystroke by any single event's own flags. A short window
+  // after compositionend catches that case for Enter specifically: nobody
+  // deliberately sends a message by pressing Enter within ~50ms of the
+  // Enter that just confirmed a conversion, so it's safe to swallow.
+  const lastCompositionEndAtRef = useRef(0);
   const [actionError, setActionError] = useState<{ message: string; detail?: string } | null>(null);
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -396,10 +418,25 @@ export function SessionTile({
     const text = draft.trim();
     if (!text || sendingRef.current) return;
     sendingRef.current = true;
+    lastSentDraftRef.current = text;
     resetDraft('');
     runAction(() => sendMessage(session.id, text)).finally(() => {
       sendingRef.current = false;
     });
+  };
+
+  // The stop button only shows while session.thinking is true (see its
+  // render site), so this is only ever reachable mid-turn. Interrupting
+  // fires immediately rather than waiting on abortSession's round-trip —
+  // this needs to feel as instant as Claude Desktop's own stop button, and
+  // runAction's error banner still surfaces a failure if the RPC itself
+  // fails. Only restores into an EMPTY draft: if the user already started
+  // typing something else while the agent was thinking, that draft wins.
+  const handleStop = () => {
+    const restore = lastSentDraftRef.current;
+    lastSentDraftRef.current = null;
+    if (restore && !draft.trim()) setDraft(restore, { coalesce: false });
+    runAction(() => abortSession(session.id));
   };
 
   // Writes straight to the session's own machine via the machine-scoped
@@ -558,8 +595,32 @@ export function SessionTile({
     // Enter always meant submit, which made it impossible to convert text
     // without accidentally sending mid-conversion. isComposing is the
     // standard signal for this (set by the browser for the whole
-    // composition, including the confirming Enter itself).
-    if (event.nativeEvent.isComposing) return;
+    // composition) — but on WebKit (Safari/WKWebView, and WebKitGTK on
+    // Linux, which shares the same WebCore composition code) compositionend
+    // fires and isComposing flips to false BEFORE the keydown for the very
+    // Enter press that confirmed the composition, unlike Chromium/WebView2
+    // which keeps isComposing true on that keydown. isComposing alone
+    // therefore misses exactly the one keystroke this guard exists for on
+    // macOS/Linux. keyCode 229 is the legacy IME sentinel WebKit still
+    // reports on that same keydown despite isComposing already being false
+    // — MDN's own documented workaround for this gap. No real key reports
+    // 229, and a deliberate, fast second Enter (send-for-real, right after
+    // confirming) is a distinct keydown that doesn't carry it, so this
+    // doesn't risk swallowing that second press.
+    //
+    // A rarer WebKit variant (reported against other editors even after
+    // they shipped this same isComposing/229 guard — e.g. slab/quill#4134)
+    // has the confirming Enter carry NEITHER signal, indistinguishable
+    // from a real keystroke on its own. lastCompositionEndAtRef is the
+    // backstop for that: see its own comment for why the short window is
+    // safe.
+    if (
+      event.nativeEvent.isComposing ||
+      event.nativeEvent.keyCode === 229 ||
+      (event.key === 'Enter' && performance.now() - lastCompositionEndAtRef.current < COMPOSITION_GRACE_MS)
+    ) {
+      return;
+    }
     // Bypasses the browser's own native undo stack (see useUndoableState for
     // why: it desyncs whenever the draft is set programmatically, e.g. a
     // slash command or attachment reference). Cmd+Shift+Z is the Mac
@@ -832,6 +893,9 @@ export function SessionTile({
                 setSlashDismissed(false);
                 setSlashHighlight(0);
               }}
+              onCompositionEnd={() => {
+                lastCompositionEndAtRef.current = performance.now();
+              }}
               onKeyDown={handleComposerKeyDown}
               onPaste={handleComposerPaste}
             />
@@ -852,9 +916,15 @@ export function SessionTile({
             busy={busy}
             onChange={(patch) => runAction(() => setAgentModes(session.id, patch))}
           />
-          <button type="submit" className="tile-composer-send" disabled={busy || !draft.trim()} title={t('send')} aria-label={t('send')}>
-            <LuSendHorizontal size={16} strokeWidth={2.25} />
-          </button>
+          {session.thinking ? (
+            <button type="button" className="tile-composer-stop" onClick={handleStop} title={t('stop')} aria-label={t('stop')}>
+              <span className="tile-composer-stop-icon" />
+            </button>
+          ) : (
+            <button type="submit" className="tile-composer-send" disabled={busy || !draft.trim()} title={t('send')} aria-label={t('send')}>
+              <LuSendHorizontal size={16} strokeWidth={2.25} />
+            </button>
+          )}
         </form>
         <AgentSettingsCaption
           path={path}

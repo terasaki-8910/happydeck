@@ -197,3 +197,40 @@ unbundled probe returned `Closed(Expired)` ~175ms after delivery (the
 notification never reaches `deliveredNotifications` for a process without
 its own bundle), so the click path can only be confirmed from the installed
 app by actually clicking one.
+
+## macOS traffic lights disappear when the window isn't frontmost (happydeck)
+
+Two fix attempts have shipped and failed:
+1. `NSAnimationContext` zero-duration wrapping + reapply on `WindowEvent::Focused`.
+2. `NSViewFrameDidChangeNotification` observer on the container + all
+   three buttons (`src-tauri/src/macos_titlebar.rs`), reapplying whenever
+   any of their frames change for any reason, not just on tao's coarser
+   window events. This one DID fix a real, separate bug — a "green button
+   only" resize jitter caused by recomputing `space_between` from live
+   (self-influenced) button positions on every correction and multiplying
+   it by each button's index (0x/1x/2x) — but did NOT fix the
+   disappearing-when-inactive symptom.
+
+Direct instrumentation (`HAPPYDECK_TITLEBAR_DEBUG=1`, logs to
+`~/Library/Logs/happydeck/titlebar-debug.log` — see `dbg_log` in
+`macos_titlebar.rs`) at real `windowDidBecomeKey:`/`windowDidResignKey:`
+transitions shows `hidden=false`, `alpha=1.00`, identical frame geometry,
+and the titlebar container staying topmost in z-order, in BOTH states.
+**This refutes the theory (from both fix attempts, and from the two
+research agents that investigated this) that AppKit resets the container's
+frame on key-status change.** Whatever's happening is not visible at the
+NSView geometry/visibility-property level — it's either a compositing/
+redraw issue this kind of introspection can't see, or something other than
+what's been tried is occluding/failing to redraw the buttons.
+
+Next step (per explicit user choice, 2026-08-25): have the user run the
+debug-instrumented build themselves and reproduce the bug for real (switch
+to a genuinely different frontmost app, not a synthetic
+`osascript ... activate`), then share `~/Library/Logs/happydeck/titlebar-debug.log`
+from that session. `launchctl setenv HAPPYDECK_TITLEBAR_DEBUG 1` before
+`open`-launching the app is the way to enable it without hitting the
+ad-hoc-dev-signing keychain error that a direct `Contents/MacOS/happydeck`
+exec triggers (see the release-signing TODO above) — `launchctl setenv`
+propagates to subsequently `open`-launched GUI processes; a raw exec from
+Terminal does not go through the same keychain-authorization path and
+reliably fails on this machine's ad-hoc dev signature.

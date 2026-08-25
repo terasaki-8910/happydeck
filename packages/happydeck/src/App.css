@@ -2132,9 +2132,23 @@ body {
      gap alone. */
   padding: 6px 4px 6px 0;
   min-width: 0;
-  min-height: 30px;
+  /* border-box, so this is a floor on the whole box: 12px of vertical
+     padding leaves 20px for one line at this font-size/line-height
+     (17.5px) — enough headroom that Windows' different font-hinting
+     doesn't round the rendered line juuust past the box and trip
+     overflow-y: auto into showing a scrollbar for an empty, one-line
+     composer. 30px (0.5px of headroom) was exactly that razor's edge —
+     invisible on macOS's auto-hiding overlay scrollbar, a full-width
+     bar on Windows' classic always-visible one. */
+  min-height: 32px;
   max-height: 140px;
   overflow-y: auto;
+  /* A wrapping textarea has no legitimate reason to scroll horizontally.
+     Without this, the same sub-pixel overflow that motivated the
+     min-height bump above trips overflow-x's UA-stylesheet default of
+     `auto` on <textarea> in Chromium/WebView2 (Windows), rendering a
+     full-width horizontal scrollbar under the placeholder text. */
+  overflow-x: hidden;
   resize: none;
 }
 
@@ -2214,6 +2228,36 @@ body {
 .tile-composer-send:not(:disabled):hover {
   background: var(--bg-tile);
   color: var(--accent-text);
+}
+
+/* Same footprint as .tile-composer-send (swaps in for it while the agent
+   is thinking) but filled, not a subtle hover-only icon — this is the one
+   moment the composer needs a persistently visible, unmissable control,
+   the same way Claude Desktop's own stop button reads as solid even at
+   rest. */
+.tile-composer-stop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tile-composer-stop:hover {
+  opacity: 0.85;
+}
+
+.tile-composer-stop-icon {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--bg);
 }
 
 .confirm-backdrop {
