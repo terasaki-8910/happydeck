@@ -89,20 +89,49 @@
 //!   were never implicitly animated by Core Animation in the first
 //!   place, wrapped in a zero-duration context or not.)
 //!
-//! The fix: stop trying to out-guess *when* AppKit will re-lay these
-//! views out, and instead react to the fact that it did, directly. Every
-//! `NSView` can be told to post `NSViewFrameDidChangeNotification`
+//! The fix, part one: stop trying to out-guess *when* AppKit will re-lay
+//! these views out, and instead react to the fact that it did, directly.
+//! Every `NSView` can be told to post `NSViewFrameDidChangeNotification`
 //! whenever its frame actually changes, for *any* reason -- our own
-//! calls, AppKit's internal layout, or anything else. We opt the
-//! container and all three buttons into that (`postsFrameChangedNotifications
-//! = true`) once, and observe it with a block-based
-//! `NSNotificationCenter` observer (`queue: nil`, so the block runs
-//! synchronously, in-place, on whatever thread posted the notification --
-//! always the main thread for these views) that just re-applies our
-//! corrected geometry. This closes the gap completely: it fires at
-//! AppKit's own layout cadence, not tao's coarser event cadence, so there
-//! is no window for AppKit's layout to win a race we didn't know we were
-//! in.
+//! calls, AppKit's internal layout, or anything else. We opt the three
+//! buttons into that (`postsFrameChangedNotifications = true`) once, and
+//! observe it with a block-based `NSNotificationCenter` observer
+//! (`queue: nil`, so the block runs synchronously, in-place, on whatever
+//! thread posted the notification -- always the main thread for these
+//! views) that just re-applies our corrected geometry. This closes most
+//! of the gap: it fires at AppKit's own layout cadence, not tao's coarser
+//! event cadence.
+//!
+//! It does NOT close it completely, though -- a real `cliclick`-driven
+//! corner drag (not a synthetic one-shot resize) with
+//! `HAPPYDECK_TITLEBAR_DEBUG=1` logging every correction showed AppKit
+//! periodically (roughly once per live-resize tick) reasserting its own
+//! native button positions on its OWN internal layout pass, synchronously,
+//! on the same main thread we're on. If that write lands after ours
+//! within the same displayed frame, ours loses that frame regardless of
+//! how fast we react afterward -- there's no tao/Tauri/AppKit hook
+//! fine-grained enough to guarantee going last against a same-thread
+//! competitor. (This part is NOT container-frame-specific, unlike the
+//! constraint theory above: once `apply_correction` below stopped writing
+//! `container.setFrame` entirely -- see its own comment -- the container
+//! stopped being reset, but AppKit still periodically reset all three
+//! BUTTON positions together, in sync, confirmed by direct measurement:
+//! close/miniaturize/zoom all move by the exact same delta at the exact
+//! same instant. The zoom/green button isn't specially targeted; it's
+//! just the most visually salient of the three, so it's the one users
+//! notice.)
+//!
+//! The fix, part two: stop trying to win that race at all, and sidestep
+//! it. `NSWindowWillStartLiveResizeNotification`/
+//! `…DidEndLiveResizeNotification` are WINDOW-level notifications AppKit
+//! sends exactly once per live-resize drag (not once per tick) -- hide
+//! the three buttons for that exact span and reveal them, freshly
+//! corrected, the instant it ends. Verified live: with this in place, a
+//! real corner drag produces a single `apply_correction` call at drag-end
+//! with every button already at its correct position, and zero visible
+//! ones in between (they're hidden, not wrong). The trade-off is
+//! deliberate and known: no traffic lights are visible while actively
+//! dragging a resize handle.
 
 use std::cell::Cell;
 use std::ptr::NonNull;
@@ -110,8 +139,10 @@ use std::ptr::NonNull;
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
-use objc2_app_kit::{NSView, NSViewFrameDidChangeNotification, NSWindow, NSWindowButton};
-use objc2_foundation::{NSNotification, NSNotificationCenter, NSObjectProtocol, NSPoint};
+use objc2_app_kit::{
+    NSButton, NSView, NSViewFrameDidChangeNotification, NSWindow, NSWindowButton, NSWindowDidEndLiveResizeNotification, NSWindowWillStartLiveResizeNotification,
+};
+use objc2_foundation::{NSNotification, NSNotificationCenter, NSNotificationName, NSObjectProtocol, NSPoint};
 
 /// Wraps a raw NSWindow pointer so it can cross into `run_on_main_thread`'s
 /// `Send` closure -- Tauri hands us the pointer from an arbitrary thread,
@@ -237,13 +268,7 @@ fn apply_correction(window: &NSWindow, titlebar_height: f64, left_inset: f64) {
         metrics
     });
 
-    // Grow the container to our titlebar's real height, top edge pinned
-    // to the window's top edge (same anchoring wry itself uses).
     let window_height = window.frame().size.height;
-    let mut container_rect = NSView::frame(&container);
-    container_rect.size.height = titlebar_height;
-    container_rect.origin.y = window_height - titlebar_height;
-
     let centered_y = (titlebar_height - button_height) / 2.0;
 
     // z-order of the titlebar container among its siblings, plus each
@@ -305,10 +330,41 @@ fn apply_correction(window: &NSWindow, titlebar_height: f64, left_inset: f64) {
         ));
     }
 
+    // Deliberately NOT `container.setFrame(...)` any more -- a live-drag
+    // capture (HAPPYDECK_TITLEBAR_DEBUG=1, real cliclick-driven corner
+    // drag, not a synthetic one-shot resize) showed AppKit re-asserting
+    // ITS OWN native ~32pt container height and native button positions
+    // on EVERY live-resize layout tick, unconditionally -- container
+    // first, then close, then miniaturize, then zoom, each stomping this
+    // function's previous correction in turn, all within single-digit
+    // milliseconds of each other. That's consistent with
+    // NSTitlebarContainerView owning an internal (private, unremovable
+    // from here) Auto Layout constraint on its own height for this
+    // window's style mask: an imperative `setFrame` satisfies it for one
+    // frame, and AppKit's constraint solver reasserts the "real" value on
+    // the very next layout pass -- which live resize triggers continuously,
+    // not occasionally. Zoom was the most visibly "stuck" of the three
+    // simply because its notification/correction happened to land last in
+    // that per-tick cascade, leaving it wrong for the largest fraction of
+    // each tick.
+    //
+    // Buttons don't have that problem: AppKit still moves them (as part of
+    // the same cascade, since they're relaid-out alongside the container
+    // it's "fixing"), but a button's own frame isn't the thing with a
+    // private constraint holding it to a specific value -- only the
+    // container's height is. So leave the container's frame alone
+    // entirely and never give AppKit a reason to reassert it, and place
+    // the buttons by converting the ABSOLUTE window-space position we
+    // want into whatever the container's local coordinate space happens
+    // to be at that instant (`convertPoint:fromView:nil` means "point is
+    // in the window's own base coordinate system") -- correct regardless
+    // of the container's current frame, without ever writing to it.
+    let target_y_in_window = window_height - titlebar_height + centered_y;
     APPLYING_CORRECTION.with(|flag| flag.set(true));
-    container.setFrame(container_rect);
     for (i, button) in [Some(close), Some(miniaturize), zoom].into_iter().flatten().enumerate() {
-        button.setFrameOrigin(NSPoint { x: left_inset + i as f64 * space_between, y: centered_y });
+        let target_in_window = NSPoint { x: left_inset + i as f64 * space_between, y: target_y_in_window };
+        let target_in_container = container.convertPoint_fromView(target_in_window, None);
+        button.setFrameOrigin(target_in_container);
     }
     APPLYING_CORRECTION.with(|flag| flag.set(false));
 }
@@ -375,6 +431,49 @@ fn install_frame_change_correction(window: &NSWindow, titlebar_height: f64, left
     watch(&miniaturize);
     if let Some(zoom) = &zoom {
         watch(zoom);
+    }
+
+    // NSViewFrameDidChangeNotification (above) reacts fast, but it's still
+    // reactive: a live-drag capture showed AppKit periodically reasserting
+    // its own native button positions on its OWN internal layout cadence
+    // (once or so per drag tick), synchronously, on the same thread -- if
+    // that write lands after ours within the same displayed frame, ours
+    // loses that frame regardless of how fast we react afterward. There is
+    // no tao/Tauri event fine-grained enough to guarantee going last.
+    //
+    // So stop trying to win that race and sidestep it instead: hide the
+    // buttons for the exact duration AppKit itself reports as "live
+    // resize" (NSWindowWillStartLiveResizeNotification /
+    // …DidEndLiveResizeNotification -- window-level, fired once per drag,
+    // not per tick, so this is cheap), and reveal them, correctly placed,
+    // the instant the drag ends. A known, deliberate trade: no traffic
+    // lights are visible while actively dragging a resize handle, instead
+    // of occasionally-flickering-to-the-wrong-place ones.
+    let mut watch_live_resize = |name: &'static NSNotificationName, hidden: bool| {
+        let close_ptr = Retained::as_ptr(&close);
+        let miniaturize_ptr = Retained::as_ptr(&miniaturize);
+        let zoom_ptr = zoom.as_ref().map(Retained::as_ptr);
+        let window_ptr = window as *const NSWindow;
+        let block = RcBlock::new(move |_note: NonNull<NSNotification>| {
+            let close: &NSButton = unsafe { &*close_ptr };
+            let miniaturize: &NSButton = unsafe { &*miniaturize_ptr };
+            close.setHidden(hidden);
+            miniaturize.setHidden(hidden);
+            if let Some(zoom_ptr) = zoom_ptr {
+                let zoom: &NSButton = unsafe { &*zoom_ptr };
+                zoom.setHidden(hidden);
+            }
+            if !hidden {
+                let window: &NSWindow = unsafe { &*window_ptr };
+                apply_correction(window, titlebar_height, left_inset);
+            }
+        });
+        let observer = unsafe { center.addObserverForName_object_queue_usingBlock(Some(name), Some(window.as_ref()), None, &block) };
+        observers.push(observer);
+    };
+    unsafe {
+        watch_live_resize(NSWindowWillStartLiveResizeNotification, true);
+        watch_live_resize(NSWindowDidEndLiveResizeNotification, false);
     }
 
     FRAME_OBSERVERS.with(|cell| cell.set(Some(observers)));

@@ -198,18 +198,43 @@ notification never reaches `deliveredNotifications` for a process without
 its own bundle), so the click path can only be confirmed from the installed
 app by actually clicking one.
 
-## macOS traffic lights disappear when the window isn't frontmost (happydeck)
+## Resize jitter — resolved (2026-08-25)
+
+Was two compounding bugs, both fixed and verified live via
+`HAPPYDECK_TITLEBAR_DEBUG=1` + a real `cliclick`-driven corner drag (not a
+synthetic one-shot resize):
+1. `space_between` was recomputed from live (self-influenced) button
+   positions on every correction, and zoom's target x used it at 2x
+   (close=0x, miniaturize=1x, zoom=2x) — any sub-pixel noise showed up
+   doubled, only on zoom. Fixed: measure once, cache, never re-derive.
+2. The bigger one: AppKit periodically reasserts its own native ~32pt
+   container height AND all three buttons' native positions during a live
+   resize, synchronously, on the same thread, unrelated to anything tao
+   exposes as a `WindowEvent` — confirmed by measurement, all three
+   buttons move by the identical delta at the identical instant (zoom/
+   green isn't specially targeted, just the most visually salient of the
+   three). No reactive correction can fully win that race. Fixed by not
+   fighting it: `apply_correction` no longer calls `container.setFrame`
+   at all (converts the desired absolute window-space button position
+   into the container's current local space instead, via
+   `convertPoint:fromView:`, so it's correct regardless of the
+   container's actual current frame), and
+   `NSWindowWillStartLiveResizeNotification`/`…DidEndLiveResizeNotification`
+   hide the three buttons for the exact span of a live drag, revealing
+   them freshly corrected the instant it ends. Verified: a real corner
+   drag now produces exactly one `apply_correction` call at drag-end, all
+   three buttons already at their correct position, nothing visibly wrong
+   at any point during the drag (hidden, not wrong).
+
+## macOS traffic lights disappear when the window isn't frontmost (happydeck) — still open
 
 Two fix attempts have shipped and failed:
 1. `NSAnimationContext` zero-duration wrapping + reapply on `WindowEvent::Focused`.
 2. `NSViewFrameDidChangeNotification` observer on the container + all
    three buttons (`src-tauri/src/macos_titlebar.rs`), reapplying whenever
    any of their frames change for any reason, not just on tao's coarser
-   window events. This one DID fix a real, separate bug — a "green button
-   only" resize jitter caused by recomputing `space_between` from live
-   (self-influenced) button positions on every correction and multiplying
-   it by each button's index (0x/1x/2x) — but did NOT fix the
-   disappearing-when-inactive symptom.
+   window events. Did not fix this symptom (see the resize-jitter section
+   above for what it DID fix).
 
 Direct instrumentation (`HAPPYDECK_TITLEBAR_DEBUG=1`, logs to
 `~/Library/Logs/happydeck/titlebar-debug.log` — see `dbg_log` in
