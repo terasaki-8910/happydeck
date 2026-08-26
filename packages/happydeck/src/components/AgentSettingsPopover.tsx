@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { LuBrain, LuShield } from 'react-icons/lu';
-import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES, compactModelLabel, permissionColorVar, translatedOptionName, type ModeOption } from '../lib/agentOptions';
+import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES, compactModelLabel, isClaudeBypassEquivalent, permissionColorVar, translatedOptionName, type ModeOption } from '../lib/agentOptions';
 import { useT, type TranslationKey } from '../lib/i18n';
 
 interface AgentSettingsPopoverProps {
@@ -142,6 +142,17 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
     </div>
   );
 
+  // While the agent is actually in bypass, 'default' is not a real choice:
+  // happy-cli silently ignores exactly that one transition (see
+  // isClaudeBypassEquivalent's doc comment) and the badge would then show
+  // 'default' while the agent stays in bypass, with no way for this app to
+  // ever notice the mismatch. Removing the option is simpler and safer
+  // than a warning the user has to read at the moment they're about to hit
+  // the trap — 'plan' and 'acceptEdits' remain, and both work as a real
+  // exit route.
+  const permissionModeChoices = isClaudeBypassEquivalent(permissionMode)
+    ? CLAUDE_PERMISSION_MODES.filter((option) => option.key !== 'default')
+    : CLAUDE_PERMISSION_MODES;
   const permissionColorVarName = permissionColorVar(permissionMode);
   const modelBadgeLabel = compactModelLabel(modelMode);
   // Badge face vs accessible name are separate concerns here. The face
@@ -254,7 +265,7 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
 
       {openMenu === 'permission' && (
         <div className="session-menu-popover agent-settings-popover" onClick={(event) => event.stopPropagation()}>
-          {section(t('permissionLabel'), CLAUDE_PERMISSION_MODES, permissionMode, 'permissionMode', true)}
+          {section(t('permissionLabel'), permissionModeChoices, permissionMode, 'permissionMode', true)}
         </div>
       )}
     </div>

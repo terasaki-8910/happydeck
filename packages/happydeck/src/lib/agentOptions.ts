@@ -14,6 +14,23 @@ export interface ModeOption {
   name: string;
 }
 
+/**
+ * happy-cli's own equivalence check (dist/index-BmZ4or3w.mjs,
+ * `isClaudeBypassEquivalent`): `resolveRemoteClaudePermissionMode` silently
+ * IGNORES a downgrade from either of these straight to 'default' —
+ * `if (isClaudeBypassEquivalent(currentMode) && nextMode === "default")
+ * return currentMode;` — with no signal back to any client that it
+ * happened. Picking 'default' while in bypass therefore updates the badge
+ * to a value the running agent silently never adopts, and nothing in this
+ * app can detect that mismatch after the fact (no event, no metadata
+ * change). 'plan' and 'acceptEdits' are NOT caught by that guard and do
+ * work as an exit. See CLAUDE_PERMISSION_MODES' filtering of 'default' for
+ * where this is used to keep the picker from offering the trap at all.
+ */
+export function isClaudeBypassEquivalent(permissionMode: string | undefined): boolean {
+  return permissionMode === 'bypassPermissions' || permissionMode === 'yolo';
+}
+
 export const CLAUDE_PERMISSION_MODES: ModeOption[] = [
   { key: 'default', name: 'default' },
   { key: 'plan', name: 'plan' },
