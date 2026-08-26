@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from 'react';
+import { buildAgentMessageMeta } from '../lib/agentMessageMeta';
 import { type AgentState, useHappyStore } from '../store/happyStore';
 import { useSelectionStore } from '../store/selectionStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -54,7 +55,11 @@ export function BulkActionBar() {
     setDraft('');
     runBulk(
       t('bulkActionSend'),
-      selectedSessions.map((s) => () => sendMessage(s.id, text)),
+      // Per-session meta, not one shared object: each selected session
+      // carries its own permission mode, and a bulk send that quietly
+      // applied one session's mode to the rest would be worse than the
+      // no-meta behaviour it replaces.
+      selectedSessions.map((s) => () => sendMessage(s.id, text, buildAgentMessageMeta(s.metadata as { permissionMode?: unknown; modelMode?: unknown } | null))),
     );
   };
 

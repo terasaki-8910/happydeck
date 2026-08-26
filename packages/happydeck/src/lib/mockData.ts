@@ -233,7 +233,15 @@ export function mockListDirectory(path: string): ListDirectoryResult {
 let mockSpawnCounter = 0;
 
 /** Builds a fresh LiveSession for the mock "start" flow — lets SpawnPanel's real success path (auto-focus the new session) be exercised in mock mode instead of just throwing "Unknown machine". */
-export function buildMockSession(machineId: string, host: string, directory: string): LiveSession {
+export function buildMockSession(
+  machineId: string,
+  host: string,
+  directory: string,
+  // Mirrors what the real spawnSession writes into a freshly spawned
+  // session's metadata — omitted fields stay absent rather than being
+  // faked, so mock mode can exercise the "not recorded" badge too.
+  modes: { permissionMode?: string; modelMode?: string; effortLevel?: string } = {},
+): LiveSession {
   mockSpawnCounter += 1;
   const id = `mock-spawned-${mockSpawnCounter}`;
   return {
@@ -243,7 +251,14 @@ export function buildMockSession(machineId: string, host: string, directory: str
     activeAt: now,
     createdAt: now,
     updatedAt: now,
-    metadata: { path: directory, host, machineId },
+    metadata: {
+      path: directory,
+      host,
+      machineId,
+      ...(modes.permissionMode ? { permissionMode: modes.permissionMode } : {}),
+      ...(modes.modelMode ? { modelMode: modes.modelMode } : {}),
+      ...(modes.effortLevel ? { effortLevel: modes.effortLevel } : {}),
+    },
     metadataVersion: 1,
     agentState: null,
     agentStateVersion: 1,

@@ -259,3 +259,28 @@ exec triggers (see the release-signing TODO above) — `launchctl setenv`
 propagates to subsequently `open`-launched GUI processes; a raw exec from
 Terminal does not go through the same keychain-authorization path and
 reliably fails on this machine's ad-hoc dev signature.
+
+## happy-cli protocol gaps found 2026-08-26 (happydeck)
+
+Three limits that are upstream in happy-cli, not fixable in happydeck:
+
+- **Effort cannot change mid-session.** happy-cli's Claude runner has code to
+  read `meta.effort` (dist/index-BmZ4or3w.mjs:6955) but `MessageMetaSchema`
+  (dist/types-CV0guBiJ.mjs:481) does not declare the field, and zod strips
+  unknown keys before the runner's callback runs. Only `--effort` at spawn
+  works. Needs an upstream schema change.
+- **`dontAsk` cannot be sent on a message.** `MessageMetaSchema.permissionMode`
+  is an enum without it, and a failed meta parse makes routeIncomingMessage
+  (:2406) fall through — the user's TEXT is silently dropped with it.
+  `buildAgentMessageMeta` allowlists against exactly the CLI's enum for this
+  reason; do NOT "simplify" it to a passthrough. On happydeck, choosing
+  `dontAsk` is effectively decorative for a running session.
+- **`bypassPermissions` is sticky downward.** `resolveRemoteClaudePermissionMode`
+  (:1454) ignores a downgrade from bypass/yolo back to `default`
+  (`ignoredDefaultDowngrade`, :6896), so the badge will show default while the
+  agent stays in bypass. Getting out needs `plan`/`acceptEdits` first, or a
+  restart.
+
+Also worth knowing: `acceptEdits` covers Edit/MultiEdit/Write/NotebookEdit
+only — `getToolDescriptor` (:1829) gives Bash `edit:false`, so Bash keeps
+prompting. That is Claude Code's own semantics, not a bug.

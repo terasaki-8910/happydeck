@@ -55,6 +55,7 @@ import {
   unknownMachineError,
   unknownSessionError,
 } from '../lib/errorMessages';
+import { logError } from '../lib/errorLog';
 import { latestAgentText } from '../lib/latestAgentText';
 import { ensureNotificationPermission, notify } from '../lib/notifications';
 import { basename } from '../lib/paths';
@@ -186,6 +187,39 @@ let encryption: Encryption | null = null;
 const lastResumeAttemptAt = new Map<string, number>();
 const RESUME_COOLDOWN_MS = 30_000;
 
+// The modes a spawn was launched with, parked until the session they belong
+// to actually exists in this store.
+//
+// Why this has to exist at all: the daemon turns permissionMode/modelMode/
+// effortLevel into `--permission-mode`/`--model`/`--effort` CLI flags
+// (appendDaemonSpawnModeArgs, happy dist/index-BmZ4or3w.mjs:5543) and then
+// forgets them — no updateMetadata call site anywhere in the CLI bundle
+// writes any of the three, and the initial session metadata
+// (index-BmZ4or3w.mjs:6487) has no mode fields. happydeck's composer badges
+// read exactly that metadata, so a session ran with the right flags while
+// the UI reported default/default/medium. Writing them here makes metadata
+// the record of what the process was STARTED with — and, being synced
+// session metadata, the phone and any other Happy client see it too.
+//
+// Why parked rather than written inline in spawnSession: when the spawn RPC
+// resolves the session usually isn't here yet and has no entry in
+// sessionEncryptors, so updateSessionAgentModes would throw. It arrives via
+// the relay's 'new-session' push, which refetches the session list,
+// registers the encryptor and fetches a message page before it ever calls
+// set() — and that push is the ONLY path that adds a session after
+// bootstrap (refreshSessionActivity below only maps over existing rows). So
+// the patch is drained from BOTH ends: spawnSession itself (for the case
+// where 'new-session' already landed while the RPC was still in flight) and
+// the 'new-session' handler. Whichever runs second wins. Not reactive
+// state, so it lives out here with the encryptor maps, same reasoning.
+const pendingSpawnModes = new Map<string, { patch: SessionAgentModesPatch; expiresAt: number }>();
+
+// A session that never shows up (relay hiccup, or it's deleted straight
+// away) must not pin its patch in memory for the rest of the app's life.
+// Generous, because the arrival path is a full session-list refetch plus a
+// message-page fetch, both of which can be slow on a big account.
+const SPAWN_MODE_PATCH_TTL_MS = 120_000;
+
 // How often to re-fetch active/activeAt for the online/offline dot -- see
 // refreshSessionActivity in bootstrap() for why this can't just come from
 // subscribeToRelayUpdates.
@@ -249,6 +283,65 @@ function requireSessionEncryptor(sessionId: string): Encryptor & Decryptor {
     throw new Error(unknownSessionError(useSettingsStore.getState().language, sessionId));
   }
   return encryptor;
+}
+
+/** Parks a spawn's modes for drainPendingSpawnModes, sweeping any entry whose session never turned up. See pendingSpawnModes. */
+function rememberSpawnModes(sessionId: string, patch: SessionAgentModesPatch): void {
+  const now = Date.now();
+  for (const [id, entry] of pendingSpawnModes) {
+    if (entry.expiresAt <= now) pendingSpawnModes.delete(id);
+  }
+  pendingSpawnModes.set(sessionId, { patch, expiresAt: now + SPAWN_MODE_PATCH_TTL_MS });
+}
+
+/**
+ * Writes a parked spawn-mode patch into the session's metadata, once the
+ * session is really present here with a usable encryptor. Returning early
+ * when it isn't is not a no-op: the other drain point (see
+ * pendingSpawnModes) still holds the entry and runs later.
+ *
+ * Deliberately best-effort about the write itself. The spawn already
+ * succeeded and the agent is already running with the correct flags — a
+ * failed metadata write is a display problem, and must not turn a
+ * successful spawn into an error in SpawnPanel. It isn't silent either: it
+ * goes to the persistent error log (the in-app Debug log, which is where
+ * this app's failures are actually read — a Tauri window has no DevTools
+ * console the user is watching), and the composer badges fall back to the
+ * honest "not recorded" rendering rather than inventing a value.
+ *
+ * References useHappyStore, declared below — fine, because every caller
+ * runs from an action or a socket handler, i.e. long after module init.
+ */
+async function drainPendingSpawnModes(sessionId: string): Promise<void> {
+  const pending = pendingSpawnModes.get(sessionId);
+  if (!pending) return;
+  if (Date.now() > pending.expiresAt) {
+    pendingSpawnModes.delete(sessionId);
+    return;
+  }
+  if (!useHappyStore.getState().sessions.some((s) => s.id === sessionId) || !sessionEncryptors.has(sessionId)) {
+    return;
+  }
+  // Removed before the await so the two drain points can't both write on
+  // the happy path...
+  pendingSpawnModes.delete(sessionId);
+  try {
+    // Reuses setAgentModes rather than calling updateSessionAgentModes
+    // directly, so this gets the same optimistic-concurrency retry and the
+    // same metadata/metadataVersion write-back as a mode picked by hand in
+    // the composer popover — one code path, one set of edge cases.
+    await useHappyStore.getState().setAgentModes(sessionId, pending.patch);
+  } catch (error) {
+    // ...but restored on failure, because the usual cause is a socket that
+    // was momentarily down (setAgentModes goes through requireSocket) and
+    // the other drain point may still be about to run. Dropping it here
+    // would let a transient relay blip permanently lose the record, with no
+    // retry anywhere.
+    if (!pendingSpawnModes.has(sessionId) && Date.now() < pending.expiresAt) {
+      pendingSpawnModes.set(sessionId, pending);
+    }
+    logError('drainPendingSpawnModes', error);
+  }
 }
 
 export const useHappyStore = create<HappyStoreState>((set, get) => ({
@@ -430,6 +523,11 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
                   ? state
                   : { sessions: [...state.sessions, { ...found, messages: page.messages, hasMoreMessages: page.hasMore, thinking: false, messagesError: null }] },
               );
+              // The normal drain point for a spawn started from this app:
+              // the session now exists here with an encryptor, so the modes
+              // it was launched with can finally be recorded. See
+              // pendingSpawnModes.
+              void drainPendingSpawnModes(found.id);
             });
             return;
           }
@@ -438,6 +536,9 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
             const removedId = update.body.sid as string | undefined;
             if (!removedId) return;
             sessionEncryptors.delete(removedId);
+            // A spawn-mode patch for a session that's already gone has
+            // nothing left to write to, and its encryptor was just dropped.
+            pendingSpawnModes.delete(removedId);
             set((state) => ({ sessions: state.sessions.filter((s) => s.id !== removedId) }));
             return;
           }
@@ -768,13 +869,35 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     if (MOCK_ENABLED) {
       const machine = get().machines.find((m) => m.id === options.machineId);
       const host = (machine?.metadata as { host?: string } | null)?.host ?? options.machineId;
-      const session = buildMockSession(options.machineId, host, options.directory);
+      // Mock sessions carry the requested modes too, so the mock UI shows
+      // the same badges the real one now does (VITE_HAPPYDECK_MOCK=1 is how
+      // this composer row actually gets looked at).
+      const session = buildMockSession(options.machineId, host, options.directory, {
+        permissionMode: options.permissionMode,
+        modelMode: options.modelMode,
+        effortLevel: options.effortLevel,
+      });
       set((state) => ({ sessions: [...state.sessions, session] }));
       return { type: 'success', sessionId: session.id };
     }
     const encryptor = machineEncryptors.get(options.machineId);
     if (!encryptor) throw new Error(unknownMachineError(useSettingsStore.getState().language, options.machineId));
-    return machineSpawnNewSession(requireSocket(), encryptor, options);
+    const result = await machineSpawnNewSession(requireSocket(), encryptor, options);
+    if (result.type === 'success') {
+      const patch: SessionAgentModesPatch = {};
+      if (options.permissionMode) patch.permissionMode = options.permissionMode;
+      if (options.modelMode) patch.modelMode = options.modelMode;
+      if (options.effortLevel) patch.effortLevel = options.effortLevel;
+      if (Object.keys(patch).length > 0) {
+        rememberSpawnModes(result.sessionId, patch);
+        // Not awaited: the caller is waiting to close the spawn panel and
+        // focus the new session, and this is a display-only write on a
+        // session that may not even be here yet. See pendingSpawnModes for
+        // why it's attempted from here as well as from 'new-session'.
+        void drainPendingSpawnModes(result.sessionId);
+      }
+    }
+    return result;
   },
 
   async listMachineDirectory(machineId, path) {

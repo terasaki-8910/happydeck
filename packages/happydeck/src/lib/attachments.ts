@@ -57,3 +57,24 @@ export function relativeAttachmentPath(cwd: string, attachDir: string, fileName:
   const dirName = attachDir.slice(cwd.length).replace(/^[/\\]+/, '');
   return joinPath(dirName, sanitizeFileName(fileName));
 }
+
+/**
+ * The single place the wire format of an attachment reference lives. This
+ * text is the ENTIRE payload as far as the agent on the other end is
+ * concerned — it sees the message body and nothing else, so a file not
+ * named here may as well never have been uploaded. That is also why the
+ * composer's attachment chips can't replace it: they're happydeck-side UI
+ * the agent has no view of. Kept byte-identical to what shipped before the
+ * chips existed, since agents have already been reading this exact form in
+ * existing transcripts.
+ */
+export function attachmentReferenceText(relativePath: string): string {
+  return `[Attached file: ${relativePath}]`;
+}
+
+/** Binary units (KB = 1024 B), matching AttachmentFile's own caption so a file doesn't appear to change size between the composer chip and the sent message. */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}

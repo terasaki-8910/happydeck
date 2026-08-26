@@ -1179,6 +1179,17 @@ body {
 
 .agent-settings-badge {
   flex-shrink: 0;
+  /* Explicit flex centring so the collapsed (icon-only) form below can
+     put a 13px SVG dead centre in a 24x24 square without depending on
+     the UA control font's baseline — the same cross-platform trap
+     documented on .composer-plus-trigger / ComposerPlusMenu.tsx.
+     This does NOT change the wide state: the badge is a flex item of
+     .agent-settings-badges, so its display is blockified either way
+     (inline-flex -> flex, as the UA's inline-block -> block). Measured
+     identical before/after at a wide pane: 93.50 x 24.00 at the same y. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 24px;
   background: var(--bg-tile);
   border: 1px solid var(--border);
@@ -1188,6 +1199,37 @@ body {
   font-size: 10.5px;
   white-space: nowrap;
   cursor: pointer;
+}
+
+/* Hidden at comfortable widths — the text label says it better. Shown
+   only inside the @container block below, and on .agent-settings-badge-unset. */
+.agent-settings-badge-icon {
+  display: none;
+}
+
+/* A session with no recorded value for this field (see
+   AgentSettingsPopoverProps — happy-cli writes none of the three, so this
+   is EVERY session happydeck did not spawn) collapses to the icon at all
+   widths, exactly like the narrow state below.
+   The alternative that was built first and rejected on sight: rendering an
+   em dash in the pill. Two "—" pills sitting side by side read as two
+   broken or disabled controls, not as "unknown" — and since this state is
+   the common case, that would be the composer's default appearance. An
+   icon alone asserts nothing about the value while still looking like a
+   control you can press, which is the honest reading. The words are still
+   in title/aria-label, and the caption under the composer spells out
+   "not recorded" once, in full. */
+.agent-settings-badge-unset {
+  width: 24px;
+  padding: 0;
+}
+
+.agent-settings-badge-unset .agent-settings-badge-text {
+  display: none;
+}
+
+.agent-settings-badge-unset .agent-settings-badge-icon {
+  display: block;
 }
 
 .agent-settings-badge:hover {
@@ -1205,6 +1247,45 @@ body {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 
+/* Narrow pane: drop both badge labels, keep the badges.
+   Container, not a viewport media query, and deliberately so — panes are
+   sized by react-resizable-panels, so two panes at one viewport width can
+   be 1200px and 300px; a media query would collapse both or neither.
+
+   480px is the composer's own CONTENT box (roughly a 520px pane once
+   .tile-bottom-bar's 24px padding and the composer's 12px padding + 2px
+   border are added back). Measured in a browser, not computed: with the
+   labels shown the row's fixed furniture ("+", send, both badges, gaps)
+   eats 228px of the content box, so the textarea gets content-width minus
+   228 — 252px at this breakpoint, 212px at a 440px content box, 192px at
+   420px. 420px was the obvious-looking breakpoint and is wrong: it only
+   fires once the textarea is ALREADY down to ~192px, i.e. exactly the
+   "4 words per line" complaint, and it leaves the whole 460-620px pane
+   band — a 2-up split on a 1024-1280px window, the most common layout
+   here — completely unhelped. Collapsed the furniture is 120px, so the
+   textarea gains 108px the moment this fires. That step is visible during
+   a drag and is inherent to any hard breakpoint; do not lower this value
+   to smooth it out, that just reinstates the bug.
+
+   Nothing is lost by hiding the words: AgentSettingsCaption directly
+   below this box prints the same model · effort · permission values in
+   full, translated text, and both badges carry title/aria-label at every
+   width (see AgentSettingsPopover.tsx). */
+@container composer (max-width: 480px) {
+  .agent-settings-badge {
+    width: 24px;
+    padding: 0;
+  }
+
+  .agent-settings-badge-text {
+    display: none;
+  }
+
+  .agent-settings-badge-icon {
+    display: block;
+  }
+}
+
 .agent-settings-popover {
   top: auto;
   bottom: 100%;
@@ -1213,6 +1294,22 @@ body {
   margin-top: 0;
   margin-bottom: 6px;
   min-width: 200px;
+  /* Hardening, now that .tile-composer is a query container: .tile is
+     overflow:hidden, so on a very narrow pane a 200px popover anchored
+     right:0 has its LEFT edge cut off.
+     The subtraction is not padding — a bare 100cqi does NOT fix this.
+     100cqi is the composer's full content box, but this popover is
+     anchored to .session-menu, which sits 30px inside the composer's
+     right edge (24px send button + the row's 6px gap). A box as wide as
+     the container, pushed 30px left of its right edge, still overhangs.
+     Measured: 100cqi alone clipped by 10px at every pane <= 220px;
+     100cqi - 30px clears by 20px at all widths.
+     Deliberately a second min-width declaration rather than folded into
+     the first — an engine without container-query units drops both of
+     these lines and keeps the plain 200px floor above, i.e. exactly
+     today's behaviour. */
+  min-width: min(200px, calc(100cqi - 30px));
+  max-width: calc(100cqi - 30px);
 }
 
 .agent-settings-section {
@@ -2025,6 +2122,32 @@ body {
    as a single input, not a strip of buttons next to an input. */
 .tile-composer {
   position: relative;
+  /* Query container for the settings badges (see
+     .agent-settings-badge-icon): what decides whether this row is cramped
+     is THIS row's width, not the window's — the layout is a resizable
+     split via react-resizable-panels, so a media query would be measuring
+     the wrong box entirely.
+     inline-size, not size: the textarea's JS auto-grow drives the block
+     axis and must stay content-dependent. No cyclic-sizing hazard on the
+     inline axis either — this is a stretch-sized flex item of
+     .tile-bottom-bar (column flex), so its width never depended on its
+     contents, and collapsing the badges therefore cannot re-trigger the
+     query.
+     KNOWN, ACCEPTED SIDE EFFECT: container-type brings contain:layout,
+     which makes this a stacking context, so .agent-settings-popover's
+     z-index:50 is now scoped inside it and paints UNDER .tile-drop-overlay
+     (z-index:20) while a file is dragged over the tile. Cosmetic only —
+     the overlay is pointer-events:none and tints the whole tile anyway,
+     and .slash-autocomplete (z-index:5) already sat under it, so this is
+     consistent rather than novel. Do NOT "fix" it by giving this element
+     a z-index above 20: that stops the drop overlay covering the composer
+     at all, which is the worse trade.
+     Positioning is otherwise untouched: this element was already
+     position:relative, so it was already the containing block for its one
+     absolutely-positioned child (.slash-autocomplete), the badge popovers
+     anchor to .session-menu, and there is no position:fixed anywhere in
+     this subtree for contain:layout to capture. */
+  container: composer / inline-size;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2918,4 +3041,147 @@ body {
 .search-result-snippet strong {
   color: var(--accent-text);
   font-weight: 700;
+}
+
+/* --- Pending attachments: chips for files already written to the
+   session's machine but NOT yet sent. Distinct from .tile-attachment-*
+   above, which renders a file that is already in the transcript and comes
+   back down Happy's own blob protocol; these are local-only state that
+   disappears the instant the message goes out. The strip lives in
+   .tile-bottom-bar's column, ABOVE the .tile-composer pill, so it gets the
+   full tile width instead of competing with the textarea in that already
+   crowded row. --- */
+
+.tile-pending-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  /* A <ul> for the semantics (a labelled list of n removable items, so a
+     screen reader announces the count) — the UA's bullets/indent are not
+     wanted, and there is no global list reset in this file. Note that
+     list-style: none is exactly what makes WebKit drop the list role,
+     which is why the JSX carries an explicit role="list". */
+  list-style: none;
+  margin: 0;
+  padding: 0 2px;
+  /* A chip is 34px tall (3px padding either side of a 28px thumbnail; the
+     two-line text column is shorter than that), so two rows plus the 6px
+     gap come to 74px. 84px shows those two rows and clips a sliver of a
+     third — a big multi-file drop then scrolls here instead of pushing the
+     composer and the message list off the bottom of a short grid tile, and
+     the cut-off row is the affordance that says so. */
+  max-height: 84px;
+  overflow-y: auto;
+  /* Windows draws a classic, always-visible scrollbar where macOS draws a
+     transient overlay one — the same split that produced the
+     .tile-composer-input min-height/overflow-x notes above. On a strip
+     this short, the default ~15px bar is a visible bite out of the chip
+     row; `thin` halves it. Ignored (harmlessly) by WebKit. */
+  scrollbar-width: thin;
+}
+
+.tile-pending-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 200px;
+  /* Same fill + border as the composer pill directly below it (var(--bg)
+     on the tile's var(--bg-tile) surface) so the strip reads as part of
+     the composer rather than as one more message bubble. */
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 3px 3px 7px;
+}
+
+/* A thumbnail is its own visual edge, so it wants less inset than the
+   file icon does — otherwise the image looks like it is floating away
+   from the chip's left border. */
+.tile-pending-chip:has(.tile-pending-chip-thumb) {
+  padding-left: 3px;
+}
+
+.tile-pending-chip-thumb {
+  flex-shrink: 0;
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  /* cover, so a wide screenshot and a tall phone photo produce the same
+     chip height and the strip stays one uniform row rather than a ragged
+     one. Cropping is fine at 28px — this is a "which file is this"
+     reminder, not a viewer. */
+  object-fit: cover;
+}
+
+.tile-pending-chip-icon {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  margin-right: 1px;
+}
+
+.tile-pending-chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.tile-pending-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.tile-pending-chip-size {
+  font-size: 10px;
+  /* --text-dim, NOT the --text-faint that .tile-attachment-size uses:
+     measured against this chip's own var(--bg) fill, faint is only
+     2.9:1 (dark) / 2.5:1 (light), below the 4.5:1 AA threshold for text
+     this small, while dim measures 5.9:1 / 4.9:1. Same call the
+     .sidebar-session-status comment above already makes. The existing
+     .tile-attachment-size is left alone here — that's a separate,
+     pre-existing case, not something to change from this file's edit. */
+  color: var(--text-dim);
+}
+
+.tile-pending-chip-remove {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  /* 5.9:1 (dark) / 4.9:1 (light) against the chip fill — comfortably over
+     the 3:1 AA minimum for a graphical control. */
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.tile-pending-chip-remove:hover {
+  background: var(--bg-tile);
+  color: var(--text);
+}
+
+/* An explicit ring rather than relying on the UA default: on the dark
+   var(--bg) chip fill, Chromium/WebView2's default focus ring is close to
+   invisible. This is the only way to remove a chip from the keyboard, so
+   it has to be plainly visible.
+   --accent-text, not --accent: the chip fill IS var(--bg), and the token
+   block at the top of this file records that raw --accent on the light
+   background measures only ~1.9:1 — under the 3:1 minimum for a
+   non-text control indicator. --accent-text is ~4.6:1 there and is
+   defined as var(--accent) in dark mode, so the dark look is unchanged.
+   2px because a 1px amber hairline on a 20px button is easy to miss. */
+.tile-pending-chip-remove:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 1px;
 }

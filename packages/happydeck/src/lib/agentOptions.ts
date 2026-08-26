@@ -55,10 +55,25 @@ export const CLAUDE_EFFORT_LEVELS: ModeOption[] = [
  * --model values).
  *
  * The "default" resolution to 'opus' is sourced from happy-cli's own
- * fallback (`DEFAULT_CLAUDE_MODEL = 'opus'` in claude/runClaude.ts) — not a
- * guess, but also not guaranteed to match every CLI version out there.
+ * fallback (`DEFAULT_CLAUDE_MODEL = 'opus'`, re-confirmed in the installed
+ * bundle at dist/index-BmZ4or3w.mjs:6452) — not a guess, but also not
+ * guaranteed to match every CLI version out there. Note it is only sound
+ * for a modelMode that is EXPLICITLY 'default': that is the one case where
+ * we know no --model was passed and the CLI fell back.
+ *
+ * Returns null when modelMode is absent, which is a genuinely different
+ * thing that used to be collapsed into the same branch. happy-cli never
+ * writes modelMode into session metadata at all (it appears only in the
+ * spawn request path — the RPC params at types-CV0guBiJ.mjs:4486 and
+ * appendDaemonSpawnModeArgs at index-BmZ4or3w.mjs:5550), so a session this
+ * app didn't spawn simply has no recorded model. Answering 'opus' there
+ * stated a fact we do not have. Substituting the user's own happydeck
+ * default instead would be the same mistake in a new place — that setting
+ * describes what the NEXT spawn will request. Callers render null as an
+ * explicit "not recorded".
  */
-export function compactModelLabel(modelMode: string): string {
+export function compactModelLabel(modelMode: string | undefined): string | null {
+  if (!modelMode) return null;
   if (modelMode === 'default') return 'opus';
   if (modelMode === 'claude-opus-5' || modelMode === 'opus') return 'opus';
   return modelMode;
@@ -73,7 +88,7 @@ export function compactModelLabel(modelMode: string): string {
  * (Claude-specific, outside the semantic-kind set that gets colored), so
  * it's left null rather than assigned an unverified color.
  */
-export function permissionColorVar(permissionMode: string): string | null {
+export function permissionColorVar(permissionMode: string | undefined): string | null {
   if (permissionMode === 'plan') return '--permission-plan';
   if (permissionMode === 'acceptEdits') return '--permission-accept-edits';
   if (permissionMode === 'bypassPermissions') return '--permission-bypass';

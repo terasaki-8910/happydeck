@@ -2,7 +2,8 @@ import { type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent
 import { LuFileUp, LuLoaderCircle, LuSendHorizontal } from 'react-icons/lu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { buildAttachmentDir, buildAttachmentPath, extensionForMimeType, relativeAttachmentPath } from '../lib/attachments';
+import { buildAgentMessageMeta } from '../lib/agentMessageMeta';
+import { attachmentReferenceText, buildAttachmentDir, buildAttachmentPath, extensionForMimeType, relativeAttachmentPath } from '../lib/attachments';
 import { AttachmentCancelledError, writeAttachmentFile } from '../lib/chunkedFileWrite';
 import { downloadTranscript } from '../lib/exportTranscript';
 import { DetailedError, splitError } from '../lib/detailedError';
@@ -21,7 +22,7 @@ import { markdownComponents } from '../lib/markdownComponents';
 import { resolveOpenTerminalAction } from '../lib/openTerminal';
 import { explainResumeError } from '../lib/resumeError';
 import { deriveTitle } from '../lib/sessionTitle';
-import { useUndoableState } from '../lib/useUndoableState';
+import { useSessionDraft } from '../lib/useSessionDraft';
 import { type AgentState, type LiveSession, useHappyStore } from '../store/happyStore';
 import { useSelectionStore } from '../store/selectionStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -30,6 +31,7 @@ import { AgentSettingsCaption, AgentSettingsPopover } from './AgentSettingsPopov
 import { AskUserQuestionCard, type AskUserQuestionQuestion } from './AskUserQuestionCard';
 import { AttachmentFile } from './AttachmentFile';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { mergePendingAttachments, type PendingAttachment, PendingAttachments } from './PendingAttachments';
 import { SlashCommandAutocomplete } from './SlashCommandAutocomplete';
 import { TileActionsMenu } from './TileActionsMenu';
 
@@ -220,7 +222,7 @@ export function SessionTile({
   const sshTargets = useSettingsStore((s) => s.sshTargets);
   const runMachineBash = useHappyStore((s) => s.runMachineBash);
 
-  const { value: draft, set: setDraft, reset: resetDraft, undo: undoDraft, redo: redoDraft } = useUndoableState('');
+  const { value: draft, set: setDraft, reset: resetDraft, undo: undoDraft, redo: redoDraft } = useSessionDraft(session.id);
   const [busy, setBusy] = useState(false);
   // A held/repeating Enter key fires several keydown events before React
   // commits the `busy`-driven `disabled` state to the DOM — state updates
@@ -253,7 +255,16 @@ export function SessionTile({
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [slashHighlight, setSlashHighlight] = useState(0);
-  const [slashDismissed, setSlashDismissed] = useState(false);
+  // Starts dismissed, not open. `draft` used to be unconditionally '' on
+  // mount, so slashQuery below was always null on the first render and
+  // this flag's initial value never mattered. Now that the draft is
+  // restored from useDraftStore, switching back to a session whose draft
+  // is a half-typed "/rev" would otherwise pop the autocomplete overlay
+  // open over a composer the user hasn't touched — and populate it from a
+  // slashCommands list that may have changed while the tile was
+  // unmounted. Every onChange clears this, so actually typing "/" still
+  // opens it.
+  const [slashDismissed, setSlashDismissed] = useState(true);
   const messagesRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -265,6 +276,15 @@ export function SessionTile({
   // the CURRENT value on every iteration, not the value from the render
   // that started it.
   const attachCancelledRef = useRef(false);
+  // Files already written to the session's machine but not yet referenced
+  // in a sent message. This list — NOT any text in the textarea — is the
+  // single source of truth for what the next message will attach; see
+  // submitDraft for why the `[Attached file: …]` text is materialised only
+  // at send time.
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  // Handed back by Stop alongside the text (see handleStop) so an
+  // interrupt doesn't force a re-upload of every attached byte.
+  const lastSentAttachmentsRef = useRef<PendingAttachment[] | null>(null);
   const [fileDragOver, setFileDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -414,15 +434,91 @@ export function SessionTile({
     }
   };
 
+  // The chips ARE the attachment state; the `[Attached file: …]` text is
+  // built here, at send time, and never exists in the textarea at all.
+  // The obvious alternative — keep appending the text to the draft (what
+  // shipped before) and render chips by parsing it back out — was
+  // rejected because it makes one fact editable in two places: delete the
+  // chip but not the text and the message still ships a path the user
+  // believes they removed; delete the text but not the chip and a chip
+  // stands for a file the agent is never told about. With the text alive
+  // only for the duration of this function, neither state is
+  // representable. The cost is that draft undo (Cmd+Z) no longer undoes an
+  // attachment — the chip's own "×" is the affordance for that instead,
+  // which is also how Claude Desktop and ChatGPT behave.
   const submitDraft = () => {
     const text = draft.trim();
-    if (!text || sendingRef.current) return;
+    const references = pendingAttachments.map((attachment) => attachmentReferenceText(attachment.relativePath)).join(' ');
+    // Attachments alone, with no typed text, is a legitimate message —
+    // the same as dropping a file into Claude Desktop and hitting enter.
+    if ((!text && !references) || sendingRef.current) return;
+    // References first, then the typed text, mirroring the chip strip
+    // sitting above the input: the transcript then reads in the same
+    // order the composer did. (The old code appended them after whatever
+    // was typed, but that was an artefact of appending onto a draft
+    // string, not a deliberate ordering choice.)
+    const message = references && text ? `${references}\n${text}` : references || text;
     sendingRef.current = true;
     lastSentDraftRef.current = text;
+    const sent = pendingAttachments;
+    lastSentAttachmentsRef.current = sent;
     resetDraft('');
-    runAction(() => sendMessage(session.id, text)).finally(() => {
+    // Unmounts every chip, which is what revokes their object URLs — see
+    // PendingAttachments.
+    setPendingAttachments([]);
+    runAction(async () => {
+      try {
+        // The mode/model badges only write session metadata, which no
+        // happy-cli code path reads back — restating them here is what
+        // actually reaches the running agent. See buildAgentMessageMeta for
+        // why this is a per-message restatement rather than a one-shot push
+        // at change time.
+        await sendMessage(session.id, message, buildAgentMessageMeta(metadata));
+      } catch (error) {
+        // Clearing optimistically is fine for the draft — a failed send
+        // costs the user a retype. It is NOT fine for the chips: they are
+        // the only place these paths are ever shown, and the bytes are
+        // already sitting on a possibly-remote machine inside a
+        // millisecond-stamped `.claude/happy-<ts>/` directory (see
+        // formatTimestampForDirName) that appears nowhere else in the UI.
+        // Losing them means the upload has to be redone over the same
+        // relay that just failed. Merged, not assigned, so an attach that
+        // landed while this send was in flight isn't clobbered. Re-thrown
+        // so runAction still logs it and raises the error banner; the
+        // draft text is deliberately left alone here, since restoring it
+        // would change existing, unrelated behaviour.
+        setPendingAttachments((prev) => mergePendingAttachments(sent, prev));
+        throw error;
+      }
+    }).finally(() => {
       sendingRef.current = false;
     });
+  };
+
+  // Drops the reference ONLY; the copy already written to the session's
+  // machine is deliberately left where it is. Deleting it would mean
+  // another RPC to a machine that may have gone away since the upload
+  // (exactly the failure attachDisconnectedError exists for), and a
+  // deletion we report as done but which silently failed is worse than a
+  // stray file: the destination is a fresh, timestamped
+  // `.claude/happy-<ts>/` directory (already gitignored in this user's
+  // projects — see buildAttachmentDir), so nothing there is ever
+  // overwritten or collides. Nothing can dangle in the other direction
+  // either: submitDraft builds the reference text FROM this list, so a
+  // removed chip leaves no path behind to send.
+  const removePendingAttachment = (id: string) => {
+    // Functional update rather than filtering the captured array: an
+    // attachFiles upload started earlier can resolve and append to this
+    // same list at any moment, and a stale closure would silently drop
+    // the file it had just finished uploading.
+    setPendingAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
+    // The clicked button is about to unmount, which drops focus to
+    // <body>. In the grid view that means the next Tab restarts at the
+    // top of the document and walks through every earlier tile before
+    // coming back to the composer the user was standing right next to.
+    // The "×" is the only keyboard route to removing a chip, so it can't
+    // be a focus trap-door.
+    composerInputRef.current?.focus();
   };
 
   // The stop button only shows while session.thinking is true (see its
@@ -434,8 +530,23 @@ export function SessionTile({
   // typing something else while the agent was thinking, that draft wins.
   const handleStop = () => {
     const restore = lastSentDraftRef.current;
+    const restoreAttachments = lastSentAttachmentsRef.current;
     lastSentDraftRef.current = null;
+    lastSentAttachmentsRef.current = null;
     if (restore && !draft.trim()) setDraft(restore, { coalesce: false });
+    // Chips come back for the same reason the text does, only more so:
+    // re-attaching means re-uploading every byte to a possibly-remote
+    // machine again. The written files are untouched by any of this, so
+    // the restored chips' paths are still valid.
+    //
+    // Note this does NOT copy the text's "only into an empty draft" rule.
+    // That rule exists because there is exactly one draft string, so a
+    // draft the user started while the agent was thinking genuinely
+    // conflicts with the restored one. Two attachment lists don't
+    // conflict — they concatenate. Gating on `pendingAttachments.length
+    // === 0` would mean: send 2 files, drop in a 3rd while the agent
+    // works, hit Stop, and the first 2 are gone for good.
+    if (restoreAttachments && restoreAttachments.length > 0) setPendingAttachments((prev) => mergePendingAttachments(restoreAttachments, prev));
     runAction(() => abortSession(session.id));
   };
 
@@ -461,7 +572,7 @@ export function SessionTile({
       const mkdirResult = await createMachineDirectory(machineId, attachDir, platform);
       if (!mkdirResult.success) throw new Error(mkdirResult.error);
 
-      const relativePaths: string[] = [];
+      const attached: PendingAttachment[] = [];
       for (const [index, file] of files.entries()) {
         if (attachCancelledRef.current) throw new AttachmentCancelledError();
         const fileName = file.name || `pasted-${index + 1}.${extensionForMimeType(file.type)}`;
@@ -475,10 +586,18 @@ export function SessionTile({
           bytes,
           () => attachCancelledRef.current,
         );
-        relativePaths.push(relativeAttachmentPath(cwd, attachDir, fileName));
+        attached.push({ id: crypto.randomUUID(), file, relativePath: relativeAttachmentPath(cwd, attachDir, fileName) });
       }
 
-      setDraft((prev) => `${prev}${relativePaths.map((p) => `[Attached file: ${p}]`).join(' ')} `, { coalesce: false });
+      // Chips appear only here, once every write in the batch has landed —
+      // never optimistically per file. A cancel (Escape / the overlay's
+      // Cancel button) throws out of the loop above before reaching this
+      // line, so a half-uploaded batch leaves no chips at all, exactly as
+      // it previously left no reference text. Functional update for the
+      // same reason removePendingAttachment uses one: a second attach
+      // action, or a removal, can have run while these writes were in
+      // flight.
+      setPendingAttachments((prev) => [...prev, ...attached]);
     } catch (error) {
       // A cancel is the user getting what they asked for, not a failure —
       // swallow it rather than surfacing an error banner. Any partially
@@ -621,9 +740,10 @@ export function SessionTile({
     ) {
       return;
     }
-    // Bypasses the browser's own native undo stack (see useUndoableState for
+    // Bypasses the browser's own native undo stack (see useSessionDraft for
     // why: it desyncs whenever the draft is set programmatically, e.g. a
-    // slash command or attachment reference). Cmd+Shift+Z is the Mac
+    // slash command or handleStop's restore of an interrupted message).
+    // Cmd+Shift+Z is the Mac
     // convention for redo; Cmd+Y is also bound since that's what was asked
     // for and costs nothing to support alongside it.
     const key = event.key.toLowerCase();
@@ -871,6 +991,13 @@ export function SessionTile({
       </div>
 
       <div className="tile-bottom-bar">
+        {/* Above the composer pill rather than inside its row: that row is
+            already crowded (+ menu, mode pills, the growing textarea,
+            send) and a chip strip inside it would fight the textarea for
+            width on a narrow grid tile. Full width above is also where
+            Claude Desktop and ChatGPT put theirs, which is what was
+            asked for. */}
+        <PendingAttachments items={pendingAttachments} onRemove={removePendingAttachment} />
         <form className="tile-composer" onSubmit={handleSend}>
           <SlashCommandAutocomplete matches={slashMatches} highlightedIndex={slashHighlight} onSelect={selectSlashCommand} />
           <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileInputChange} />
@@ -909,10 +1036,18 @@ export function SessionTile({
               </span>
             )}
           </div>
+          {/* Deliberately NOT defaulted to 'default'/'default'/'medium'
+              here any more. Nothing in happy-cli writes these fields into
+              session metadata, so their absence means "unknown", and the
+              old fallbacks turned that into three confident but unfounded
+              claims — the reason a session spawned with opusplan/max/
+              acceptEdits still showed デフォルト + opus + 中. A session
+              this app spawned now gets them written for real right after
+              the spawn RPC (see spawnSession in happyStore). */}
           <AgentSettingsPopover
-            permissionMode={metadata?.permissionMode ?? 'default'}
-            modelMode={metadata?.modelMode ?? 'default'}
-            effortLevel={metadata?.effortLevel ?? 'medium'}
+            permissionMode={metadata?.permissionMode}
+            modelMode={metadata?.modelMode}
+            effortLevel={metadata?.effortLevel}
             busy={busy}
             onChange={(patch) => runAction(() => setAgentModes(session.id, patch))}
           />
@@ -921,16 +1056,16 @@ export function SessionTile({
               <span className="tile-composer-stop-icon" />
             </button>
           ) : (
-            <button type="submit" className="tile-composer-send" disabled={busy || !draft.trim()} title={t('send')} aria-label={t('send')}>
+            <button type="submit" className="tile-composer-send" disabled={busy || (!draft.trim() && pendingAttachments.length === 0)} title={t('send')} aria-label={t('send')}>
               <LuSendHorizontal size={16} strokeWidth={2.25} />
             </button>
           )}
         </form>
         <AgentSettingsCaption
           path={path}
-          permissionMode={metadata?.permissionMode ?? 'default'}
-          modelMode={metadata?.modelMode ?? 'default'}
-          effortLevel={metadata?.effortLevel ?? 'medium'}
+          permissionMode={metadata?.permissionMode}
+          modelMode={metadata?.modelMode}
+          effortLevel={metadata?.effortLevel}
         />
       </div>
     </section>
