@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { LuCalendarDays, LuGauge, LuTimer } from 'react-icons/lu';
+import { LuBrain, LuCalendarDays, LuGauge, LuTimer } from 'react-icons/lu';
 import { usageWindowLabel, windowKey, type UsageWindow } from '../lib/claudeUsage';
 import { useT } from '../lib/i18n';
 import { useSettingsStore } from '../store/settingsStore';
@@ -23,10 +23,13 @@ function formatUpdated(language: 'en' | 'ja', fetchedAt: number): string {
  * icon+text badges like AgentSettingsPopover: this is one glanceable status
  * reading, not two independent settings to toggle.
  *
- * Only the session window and the first weekly window show in the compact
- * badge; any additional per-model weekly caps (e.g. a Fable-specific one)
- * only appear in the popover — deciding which weekly line is "the" one to
- * headline isn't something a titlebar sliver has room to explain.
+ * The session window, the first weekly window, and (while it exists) a
+ * Fable-specific weekly window all show in the compact badge; any other
+ * per-model weekly caps only appear in the popover. Fable's own cap is a
+ * limited-time addition on top of the aggregate weekly one (user request,
+ * 2026-09-01) — worth headlining while it's relevant. Everything else stays
+ * generic on purpose: singling out one more named model here is a deliberate,
+ * temporary exception to that, not a precedent for hardcoding others.
  */
 export function UsageIndicator() {
   const t = useT();
@@ -69,6 +72,11 @@ export function UsageIndicator() {
   const sessionWindow = windows.find((w): w is Extract<UsageWindow, { kind: 'session' }> => w.kind === 'session');
   const weekWindows = windows.filter((w): w is Extract<UsageWindow, { kind: 'week' }> => w.kind === 'week');
   const primaryWeek = weekWindows[0] ?? null;
+  // See the module doc above — a deliberate, named exception, expected to
+  // naturally stop rendering (fableWeek just stays null) once the CLI no
+  // longer reports this window. The `!== primaryWeek` guard avoids showing
+  // the same window twice for an account where Fable IS the only weekly cap.
+  const fableWeek = weekWindows.find((w) => w.modelLabel === 'Fable' && w !== primaryWeek) ?? null;
 
   return (
     <div className="usage-indicator" ref={rootRef}>
@@ -91,6 +99,13 @@ export function UsageIndicator() {
               <span className={`usage-indicator-metric ${metricClass(primaryWeek.percent)}`}>
                 <LuCalendarDays size={12} strokeWidth={2} />
                 {primaryWeek.percent}%
+              </span>
+            )}
+            {primaryWeek && fableWeek && <span className="usage-indicator-sep">·</span>}
+            {fableWeek && (
+              <span className={`usage-indicator-metric ${metricClass(fableWeek.percent)}`}>
+                <LuBrain size={12} strokeWidth={2} />
+                {fableWeek.percent}%
               </span>
             )}
           </>
