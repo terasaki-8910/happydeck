@@ -124,3 +124,9 @@ export function localMachineIdTimeoutError(language: Language): string {
     ? 'このマシンのHappy ID（~/.happy/settings.json）の読み込みが予期せずタイムアウトしました — これは単なるローカルファイルの読み込みなので、発生した場合はキーチェーン固有の問題というより、Tauriのipcブリッジ自体が固まっている可能性が高いです。'
     : "Reading this machine's Happy ID (~/.happy/settings.json) timed out unexpectedly — this is a plain local file read, so if this fires the Tauri IPC bridge itself is likely stuck rather than anything keychain-specific.";
 }
+
+export function claudeUsageTimeoutError(language: Language): string {
+  return language === 'ja'
+    ? 'claude CLIから使用量を取得する処理がタイムアウトしました。claude CLIがこのMacにインストールされ、ログイン済みであることを確認してください。'
+    : 'Fetching usage from the claude CLI timed out. Make sure the claude CLI is installed and logged in on this Mac.';
+}

@@ -85,6 +85,10 @@ interface SettingsState {
   // the local machine itself in that case.
   lastSpawnMachineId: string | null;
   lastSpawnDirectoryByMachine: Record<string, string>;
+  // Controls both whether the titlebar badge renders AND whether
+  // usageStore polls at all — a user who turns this off shouldn't still
+  // pay for a `claude` subprocess every 3 minutes in the background.
+  showUsageIndicator: boolean;
   setTheme: (theme: Theme) => void;
   setFont: (font: FontChoice) => void;
   setLanguage: (language: Language) => void;
@@ -94,6 +98,7 @@ interface SettingsState {
   setNotifyPref: (key: keyof NotificationPrefs, value: boolean) => void;
   setSshTarget: (machineId: string, target: string) => void;
   setLastSpawnLocation: (machineId: string, directory: string) => void;
+  setShowUsageIndicator: (show: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -111,6 +116,7 @@ export const useSettingsStore = create<SettingsState>()(
       sshTargets: {},
       lastSpawnMachineId: null,
       lastSpawnDirectoryByMachine: {},
+      showUsageIndicator: true,
       setTheme: (theme) => set({ theme }),
       setFont: (font) => set({ font }),
       setLanguage: (language) => set({ language }),
@@ -135,6 +141,7 @@ export const useSettingsStore = create<SettingsState>()(
           lastSpawnMachineId: machineId,
           lastSpawnDirectoryByMachine: { ...state.lastSpawnDirectoryByMachine, [machineId]: directory },
         })),
+      setShowUsageIndicator: (showUsageIndicator) => set({ showUsageIndicator }),
     }),
     { name: 'happydeck-settings', storage: createJSONStorage(() => createTauriFileStorage('settings.json')) },
   ),

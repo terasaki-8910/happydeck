@@ -194,6 +194,11 @@ const STRINGS = {
     modelOptDefault: 'default model',
     modeUnknown: 'not recorded',
     modeUnknownHint: "This session's model, effort and permission mode were never recorded in its metadata, so happydeck can't report them.",
+    usageWindowSession: 'Session (5h)',
+    usageTitle: 'Claude usage',
+    usageUnavailable: 'usage unavailable',
+    usageRefreshButton: 'Refresh now',
+    usageIndicatorSettingLabel: 'Show Claude usage in titlebar',
   },
   ja: {
     newSession: '新規セッション',
@@ -381,6 +386,11 @@ const STRINGS = {
     modelOptDefault: 'デフォルトモデル',
     modeUnknown: '未記録',
     modeUnknownHint: 'このセッションのモデル・推論の強さ・権限モードはメタデータに記録されていないため、happydeckでは表示できません。',
+    usageWindowSession: 'セッション（5時間）',
+    usageTitle: 'Claude使用量',
+    usageUnavailable: '使用量を取得できません',
+    usageRefreshButton: '今すぐ更新',
+    usageIndicatorSettingLabel: 'タイトルバーにClaudeの使用量を表示',
   },
 } satisfies Record<Language, Record<string, string>>;
 

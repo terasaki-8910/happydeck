@@ -10,6 +10,7 @@ import { SessionTile } from './components/SessionTile';
 import { SearchModal } from './components/SearchModal';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
+import { UsageIndicator } from './components/UsageIndicator';
 import { SESSION_DRAG_MIME } from './lib/dnd';
 import { type TranslationKey, useT } from './lib/i18n';
 import { positionTrafficLights } from './lib/tauri';
@@ -22,6 +23,7 @@ import { installZoomHotkeys } from './lib/zoomHotkeys';
 import { listen } from '@tauri-apps/api/event';
 import { useHappyStore } from './store/happyStore';
 import { FONT_STACKS, useSettingsStore } from './store/settingsStore';
+import { useUsageStore } from './store/usageStore';
 import { useViewStore } from './store/viewStore';
 import { useWorkspaceStore } from './store/workspaceStore';
 
@@ -104,9 +106,15 @@ function App() {
   const theme = useSettingsStore((s) => s.theme);
   const language = useSettingsStore((s) => s.language);
 
+  const startUsagePolling = useUsageStore((s) => s.start);
+
   useEffect(() => {
     bootstrap();
   }, [bootstrap]);
+
+  useEffect(() => {
+    startUsagePolling();
+  }, [startUsagePolling]);
 
   // Measures the titlebar's real rendered height so the traffic lights can
   // be centered on the actual value instead of a number hardcoded on the
@@ -352,6 +360,7 @@ function App() {
           </div>
         )}
         <div className="titlebar-right">
+          <UsageIndicator />
           <BulkKillMenu />
         </div>
       </div>

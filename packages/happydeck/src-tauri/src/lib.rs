@@ -4,6 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
 
+mod claude_usage;
 mod notification;
 
 #[cfg(target_os = "macos")]
@@ -264,6 +265,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(TitlebarHeight(std::sync::Mutex::new(None)))
+        .manage(claude_usage::ClaudePath(std::sync::Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             get_credentials,
             set_credentials,
@@ -272,7 +274,8 @@ pub fn run() {
             read_app_config_file,
             write_app_config_file,
             copy_text_owned,
-            notification::notify_session
+            notification::notify_session,
+            claude_usage::claude_usage
         ])
         .on_window_event(|window, event| {
             // Re-anchor on both resize AND focus change. Resize is the

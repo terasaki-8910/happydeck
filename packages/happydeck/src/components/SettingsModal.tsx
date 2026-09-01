@@ -107,6 +107,8 @@ function GeneralSection() {
   const setFont = useSettingsStore((s) => s.setFont);
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
+  const showUsageIndicator = useSettingsStore((s) => s.showUsageIndicator);
+  const setShowUsageIndicator = useSettingsStore((s) => s.setShowUsageIndicator);
   const defaultPermissionMode = useSettingsStore((s) => s.defaultPermissionMode);
   const defaultModelMode = useSettingsStore((s) => s.defaultModelMode);
   const defaultEffortLevel = useSettingsStore((s) => s.defaultEffortLevel);
@@ -151,6 +153,8 @@ function GeneralSection() {
         </select>
       </label>
       <p className="settings-hint">{t('fontHint')}</p>
+
+      <ToggleSwitch checked={showUsageIndicator} onChange={setShowUsageIndicator} label={t('usageIndicatorSettingLabel')} />
 
       <h3>{t('defaultNewSessionOptions')}</h3>
       <p className="settings-hint">{t('defaultNewSessionOptionsHint')}</p>

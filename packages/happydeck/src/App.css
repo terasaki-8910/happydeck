@@ -169,10 +169,13 @@ body {
 }
 
 /* Reserved for the active pane's session name/path today; the standing
-   convention going forward is that any *global* (not per-tile) action
-   icon belongs in this titlebar, added to .titlebar-controls on the left —
-   .titlebar-right on the far side stays reserved specifically for the
-   kill-session action, so it's always in the same corner. */
+   convention going forward is that any *global* (not per-tile) ACTION icon
+   belongs in .titlebar-controls on the left. .titlebar-right on the far
+   side is for trailing-edge STATUS readouts and the kill-session action —
+   same "actions on the left, status on the trailing edge" split as a
+   macOS menu bar or VSCode's status bar. Kill stays the rightmost item
+   (closest to the corner) since it's the one item there that's genuinely
+   an action, not a reading. */
 .titlebar-title {
   justify-self: center;
   min-width: 0;
@@ -187,6 +190,7 @@ body {
 .titlebar-right {
   display: flex;
   align-items: center;
+  gap: 4px;
   justify-self: end;
   min-width: 0;
 }
@@ -531,6 +535,116 @@ body {
   flex-direction: column;
   gap: 1px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.usage-indicator {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.usage-indicator-trigger {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.usage-indicator-trigger:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.usage-indicator-metric {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.usage-indicator-metric-warn {
+  color: var(--accent-text);
+}
+
+.usage-indicator-metric-danger {
+  color: var(--danger);
+}
+
+.usage-indicator-sep {
+  color: var(--text-faint);
+}
+
+.usage-popover {
+  top: calc(100% + 4px);
+  min-width: 240px;
+  gap: 0;
+}
+
+.usage-popover-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.usage-popover-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--text);
+}
+
+.usage-popover-resets {
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.usage-popover-row-value {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.usage-popover-row-value.usage-indicator-metric-warn,
+.usage-popover-row-value.usage-indicator-metric-danger {
+  font-weight: 600;
+}
+
+.usage-popover-error {
+  margin: 0;
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.usage-popover-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 2px;
+}
+
+.usage-popover-updated {
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.usage-popover button.usage-popover-refresh {
+  width: auto;
+  padding: 3px 8px;
+  color: var(--text-dim);
+}
+
+.usage-popover button.usage-popover-refresh:hover:not(:disabled) {
+  color: var(--text);
 }
 
 .bulk-kill {
