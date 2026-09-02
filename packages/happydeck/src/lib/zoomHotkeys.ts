@@ -42,11 +42,12 @@
  * the user's first Cmd+=/Cmd+-/scroll). Sits on the 0.1 grid normally now
  * (was deliberately off-grid under the old 0.2 step).
  */
+import { isMac } from './platform';
+
 const DEFAULT_ZOOM = 1.1;
 const ZOOM_STEP = 0.1;
 
 export function installZoomHotkeys(): () => void {
-  const isMac = navigator.platform.toLowerCase().includes('mac');
   let zoomLevel = DEFAULT_ZOOM;
 
   const applyZoom = (next: number) => {

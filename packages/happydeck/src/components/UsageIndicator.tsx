@@ -65,10 +65,18 @@ export function UsageIndicator() {
   }, [open]);
 
   if (!showUsageIndicator) return null;
-  // Nothing fetched yet (first ~3.5s after launch) — avoid a flash of an
-  // error/placeholder badge before the initial request resolves.
-  if (windows.length === 0 && !error) return null;
+  // Nothing has SETTLED yet (first ~3.5s after launch) — avoid a flash of a
+  // placeholder badge before the initial request resolves one way or
+  // another. Gated on fetchedAt, not on windows.length: a request that
+  // completed without throwing but parsed zero windows (an unrecognized
+  // response shape — see the parse-failed message below) must still show
+  // SOMETHING, or it's indistinguishable from "disabled in Settings" or
+  // "still loading" and unreportable when it happens (confirmed report,
+  // 2026-09-02: a Windows build that could genuinely no longer launch
+  // `claude` showed nothing at all, not even the error badge below).
+  if (fetchedAt === null && !error) return null;
 
+  const noData = windows.length === 0;
   const sessionWindow = windows.find((w): w is Extract<UsageWindow, { kind: 'session' }> => w.kind === 'session');
   const weekWindows = windows.filter((w): w is Extract<UsageWindow, { kind: 'week' }> => w.kind === 'week');
   const primaryWeek = weekWindows[0] ?? null;
@@ -81,7 +89,7 @@ export function UsageIndicator() {
   return (
     <div className="usage-indicator" ref={rootRef}>
       <button type="button" className="usage-indicator-trigger" title={t('usageTitle')} onClick={() => setOpen((v) => !v)}>
-        {windows.length === 0 ? (
+        {noData ? (
           <span className="usage-indicator-metric">
             <LuGauge size={13} strokeWidth={2} />
             {t('usageUnavailable')}
@@ -124,6 +132,7 @@ export function UsageIndicator() {
               <span className={`usage-popover-row-value ${metricClass(w.percent)}`}>{w.percent}%</span>
             </div>
           ))}
+          {noData && !error && <p className="usage-popover-error">{t('usageParseFailed')}</p>}
           {error && <p className="usage-popover-error">{error}</p>}
           <div className="session-menu-divider" />
           <div className="usage-popover-footer">

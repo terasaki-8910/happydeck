@@ -154,10 +154,24 @@ body {
      target; this gives a roomier grab area to go with drag-region="deep"
      below. */
   height: 44px;
-  padding-left: 78px;
+  /* 10px, matching padding-right, is correct on any platform with no
+     native window-chrome overlay to clear (everywhere but macOS today —
+     see the override below). Only macOS draws real buttons in this
+     corner; reserving their width unconditionally on Windows/Linux left a
+     78px dead gap in front of the sidebar-toggle/search icons for no
+     reason (reported 2026-09-02). */
+  padding-left: 10px;
   padding-right: 10px;
   background: var(--bg-tile);
   border-bottom: 1px solid var(--border);
+}
+
+/* [data-platform] is set once at startup in App.tsx (navigator.platform,
+   the same check zoomHotkeys.ts uses for Cmd-vs-Ctrl) — a plain fact about
+   this OS, not a user preference, so it lives next to [data-theme] as its
+   own root attribute rather than a class threaded through the component. */
+:root[data-platform='macos'] .titlebar {
+  padding-left: 78px;
 }
 
 .titlebar-controls {

@@ -18,6 +18,7 @@ import { type DropZone, insertAtGap, insertAtOuterEdge, insertAtZone, type Outer
 import { mostRecentSession } from './lib/sessionOrder';
 import { deriveTitle } from './lib/sessionTitle';
 import { bootstrapFailedError } from './lib/errorMessages';
+import { isMac } from './lib/platform';
 import { installWindowsClipboardFix } from './lib/winClipboard';
 import { installZoomHotkeys } from './lib/zoomHotkeys';
 import { listen } from '@tauri-apps/api/event';
@@ -135,6 +136,13 @@ function App() {
     if (theme === 'system') delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  // Lets App.css reserve left-inset room for the native traffic lights only
+  // where they actually exist. macOS-only fact, computed once — never
+  // reactive to anything, unlike theme/font above.
+  useEffect(() => {
+    document.documentElement.dataset.platform = isMac ? 'macos' : 'other';
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
