@@ -20,6 +20,7 @@ import { messageRole, type RenderablePart, renderablePart } from '../lib/formatM
 import { type TranslationKey, useT } from '../lib/i18n';
 import { markdownComponents } from '../lib/markdownComponents';
 import { resolveOpenTerminalAction } from '../lib/openTerminal';
+import { alwaysAllowGrant, describePendingRequest } from '../lib/permissionRequest';
 import { explainResumeError } from '../lib/resumeError';
 import { deriveTitle } from '../lib/sessionTitle';
 import { useSessionDraft } from '../lib/useSessionDraft';
@@ -908,18 +909,33 @@ export function SessionTile({
                   key={id}
                   questions={questionInput.questions}
                   busy={busy}
-                  onSubmit={(answers) => runAction(() => allowRequest(session.id, id, { answers }))}
+                  onSubmit={(answers) => runAction(() => allowRequest(session.id, id, { updatedInput: { answers } }))}
                 />
               );
             }
+            const detail = describePendingRequest(request);
+            const grant = alwaysAllowGrant(request, language);
             return (
               <div key={id} className="permission-request">
-                <span className="permission-tool">{request.tool}</span>
+                <span className="permission-tool" title={detail ?? undefined}>
+                  {request.tool}
+                  {detail && <span className="permission-detail">{detail}</span>}
+                </span>
                 <button type="button" disabled={busy} onClick={() => runAction(() => allowRequest(session.id, id))}>
-                  allow
+                  {t('permissionAllow')}
                 </button>
+                {grant && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    title={grant.scopeDescription}
+                    onClick={() => runAction(() => allowRequest(session.id, id, { decision: 'approved_for_session', allowedTools: grant.allowedTools }))}
+                  >
+                    {t('permissionAlwaysAllow')}
+                  </button>
+                )}
                 <button type="button" disabled={busy} onClick={() => runAction(() => denyRequest(session.id, id))}>
-                  deny
+                  {t('permissionDeny')}
                 </button>
               </div>
             );

@@ -109,6 +109,22 @@ export interface AgentState {
   [key: string]: unknown;
 }
 
+/**
+ * Mirrors happy-client's own sessionAllow options exactly (minus `mode`,
+ * deliberately not exposed here — switching a session's whole permission
+ * mode is a broader lever than "allow this one thing," already covered by
+ * AgentSettingsPopover's own mode picker; bundling it into a single-tool
+ * grant would silently widen scope beyond what the user asked for).
+ * `decision: 'approved_for_session'` + `allowedTools` is what makes an
+ * allow "sticky" for the rest of the session — see lib/permissionRequest.ts
+ * for how `allowedTools` gets built.
+ */
+export interface AllowRequestOptions {
+  updatedInput?: Record<string, unknown>;
+  decision?: 'approved' | 'approved_for_session';
+  allowedTools?: string[];
+}
+
 export interface LiveSession extends DecryptedSession {
   messages: DecryptedMessage[];
   thinking: boolean;
@@ -140,7 +156,7 @@ interface HappyStoreState {
   loadOlderMessages: (sessionId: string) => Promise<void>;
   sendMessage: (sessionId: string, text: string, meta?: SendMessageMeta) => Promise<void>;
   setAgentModes: (sessionId: string, patch: SessionAgentModesPatch) => Promise<void>;
-  allowRequest: (sessionId: string, requestId: string, updatedInput?: Record<string, unknown>) => Promise<void>;
+  allowRequest: (sessionId: string, requestId: string, options?: AllowRequestOptions) => Promise<void>;
   denyRequest: (sessionId: string, requestId: string) => Promise<void>;
   abortSession: (sessionId: string) => Promise<void>;
   killSession: (sessionId: string) => Promise<void>;
@@ -825,7 +841,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
     }));
   },
 
-  async allowRequest(sessionId, requestId, updatedInput) {
+  async allowRequest(sessionId, requestId, options) {
     if (MOCK_ENABLED) {
       set((state) => ({
         sessions: state.sessions.map((s) =>
@@ -836,7 +852,7 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
       }));
       return;
     }
-    await sessionAllow(requireSocket(), sessionId, requireSessionEncryptor(sessionId), requestId, { updatedInput });
+    await sessionAllow(requireSocket(), sessionId, requireSessionEncryptor(sessionId), requestId, options);
   },
 
   async denyRequest(sessionId, requestId) {

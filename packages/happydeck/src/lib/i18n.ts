@@ -200,6 +200,9 @@ const STRINGS = {
     usageParseFailed: "claude responded, but its usage output wasn't in a recognized format.",
     usageRefreshButton: 'Refresh now',
     usageIndicatorSettingLabel: 'Show Claude usage in titlebar',
+    permissionAllow: 'allow',
+    permissionAlwaysAllow: 'always allow',
+    permissionDeny: 'deny',
   },
   ja: {
     newSession: '新規セッション',
@@ -393,6 +396,9 @@ const STRINGS = {
     usageParseFailed: 'claudeから応答はありましたが、使用量の形式を認識できませんでした。',
     usageRefreshButton: '今すぐ更新',
     usageIndicatorSettingLabel: 'タイトルバーにClaudeの使用量を表示',
+    permissionAllow: '許可',
+    permissionAlwaysAllow: '常に許可',
+    permissionDeny: '拒否',
   },
 } satisfies Record<Language, Record<string, string>>;
 

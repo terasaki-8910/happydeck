@@ -194,6 +194,14 @@ export function mockSessions(): LiveSession[] {
               ],
             },
           },
+          // A generic (non-AskUserQuestion) tool-permission request — exercises
+          // the plain allow/always-allow/deny row in SessionTile.tsx, which had
+          // no mock coverage at all before the always-allow feature (2026-09-02).
+          'mock-perm-1': {
+            tool: 'Bash',
+            createdAt: now,
+            arguments: { command: 'git status --short' },
+          },
         },
       },
       agentStateVersion: 1,
