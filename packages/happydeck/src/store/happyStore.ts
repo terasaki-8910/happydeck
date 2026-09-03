@@ -689,13 +689,28 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
           set((state) => ({
             sessions: state.sessions.map((s) => {
               const fresh = byId.get(s.id);
-              if (!fresh || (fresh.active === s.active && fresh.activeAt === s.activeAt)) return s;
-              // A session confirmed offline can't still be generating —
-              // `thinking` has no fetchSessions-backed source of truth of
-              // its own (ephemeral-only), so this is its one correction
-              // point too, for the same "process died without a live event
-              // telling us" case.
-              return { ...s, active: fresh.active, activeAt: fresh.activeAt, thinking: fresh.active && s.thinking };
+              if (!fresh) return s;
+              // Metadata is refreshed on its own terms, not gated behind the
+              // activity check below: 'update-session' is the only other
+              // inbound path for it and has no replay, so a push that landed
+              // while the socket was down (or before this client connected)
+              // left the mode badges showing another client's stale values
+              // until an app restart. fetchSessions already decrypted this;
+              // it was simply being discarded. Version-guarded so a slower
+              // poll response can't stomp a newer optimistic local write.
+              const metadataChanged = fresh.metadataVersion > s.metadataVersion;
+              const activityChanged = fresh.active !== s.active || fresh.activeAt !== s.activeAt;
+              if (!metadataChanged && !activityChanged) return s;
+              return {
+                ...s,
+                ...(metadataChanged ? { metadata: fresh.metadata, metadataVersion: fresh.metadataVersion } : {}),
+                // A session confirmed offline can't still be generating —
+                // `thinking` has no fetchSessions-backed source of truth of
+                // its own (ephemeral-only), so this is its one correction
+                // point too, for the same "process died without a live event
+                // telling us" case.
+                ...(activityChanged ? { active: fresh.active, activeAt: fresh.activeAt, thinking: fresh.active && s.thinking } : {}),
+              };
             }),
           }));
         } catch {
@@ -943,11 +958,21 @@ export const useHappyStore = create<HappyStoreState>((set, get) => ({
   async resumeSession(sessionId) {
     const session = get().sessions.find((s) => s.id === sessionId);
     if (!session) throw new Error(unknownSessionError(useSettingsStore.getState().language, sessionId));
-    const machineId = (session.metadata as { machineId?: string } | null)?.machineId;
+    const resumeMetadata = session.metadata as { machineId?: string; modelMode?: string; permissionMode?: string } | null;
+    const machineId = resumeMetadata?.machineId;
     if (!machineId) throw new Error(noMachineIdToResumeError(useSettingsStore.getState().language));
     const encryptor = machineEncryptors.get(machineId);
     if (!encryptor) throw new Error(unknownMachineError(useSettingsStore.getState().language, machineId));
-    const result = await machineResumeSession(requireSocket(), encryptor, machineId, sessionId);
+    // A resume relaunches a real process, and the daemon supplies no mode
+    // flags of its own — anything not passed here comes back up on the
+    // CLI's own defaults (yolo/opus/medium), i.e. a session the user had
+    // set to something safe silently returns bypassed. Sending back what
+    // this session was recorded as running with is the only thing that
+    // keeps a resume from changing the agent's behavior behind their back.
+    const result = await machineResumeSession(requireSocket(), encryptor, machineId, sessionId, {
+      model: resumeMetadata?.modelMode,
+      permissionMode: resumeMetadata?.permissionMode,
+    });
     // Mirrors killSession's optimistic update in reverse — the RPC's own
     // success already tells us the process is back, but statusOf/
     // statusClassOf gate the "thinking" ephemeral behind `active`, so

@@ -117,30 +117,47 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
     current: string | undefined,
     key: 'permissionMode' | 'modelMode' | 'effortLevel',
     closeOnSelect: boolean,
-  ) => (
-    <div className="agent-settings-section">
-      <span className="session-menu-label">{title}</span>
-      {options.map((option) => {
-        const colorVar = key === 'permissionMode' ? permissionColorVar(option.key) : null;
-        return (
-          <button
-            key={option.key}
-            type="button"
-            className="agent-settings-row"
-            disabled={busy}
-            style={colorVar ? { color: `var(${colorVar})` } : undefined}
-            onClick={() => {
-              onChange({ [key]: option.key });
-              if (closeOnSelect) setOpenMenu(null);
-            }}
-          >
-            <span>{translatedOptionName(t, option, false)}</span>
-            {option.key === current && <span className="agent-settings-check">✓</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
+  ) => {
+    // Effort is spawn-only, and not by choice: happy-cli's MessageMetaSchema
+    // (dist/types-CV0guBiJ.mjs:481-497) is a bare z.object with no `effort`
+    // key and no .passthrough(), so zod strips it off a user message before
+    // onUserMessage could ever read it. `--effort` is a launch flag and
+    // nothing else. Offering it as a live choice meant a pick repainted this
+    // list and the caption while the agent kept running at whatever it was
+    // started with — the single most likely source of a caption that
+    // disagrees with reality (reported 2026-09-04). Shown read-only rather
+    // than hidden: which effort a session was LAUNCHED with is still worth
+    // seeing. Change it for future sessions in Settings > General.
+    const readOnly = key === 'effortLevel';
+    return (
+      <div className="agent-settings-section">
+        <span className="session-menu-label">
+          {title}
+          {readOnly && <span className="agent-settings-readonly-note">{t('effortSpawnOnly')}</span>}
+        </span>
+        {options.map((option) => {
+          const colorVar = key === 'permissionMode' ? permissionColorVar(option.key) : null;
+          return (
+            <button
+              key={option.key}
+              type="button"
+              className="agent-settings-row"
+              disabled={busy || readOnly}
+              style={colorVar ? { color: `var(${colorVar})` } : undefined}
+              onClick={() => {
+                if (readOnly) return;
+                onChange({ [key]: option.key });
+                if (closeOnSelect) setOpenMenu(null);
+              }}
+            >
+              <span>{translatedOptionName(t, option, false)}</span>
+              {option.key === current && <span className="agent-settings-check">✓</span>}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
 
   // While the agent is actually in bypass, 'default' is not a real choice:
   // happy-cli silently ignores exactly that one transition (see
@@ -266,6 +283,13 @@ export function AgentSettingsPopover({ permissionMode, modelMode, effortLevel, b
       {openMenu === 'permission' && (
         <div className="session-menu-popover agent-settings-popover" onClick={(event) => event.stopPropagation()}>
           {section(t('permissionLabel'), permissionModeChoices, permissionMode, 'permissionMode', true)}
+          {/* Was a hover-only `title` on the badge, on the reasoning that
+              this is a "once-per-user surprise". It surprised a real user
+              into a long debugging session instead (2026-09-04): they read
+              the amber badge as Claude Code's own auto-accept colour, took
+              it to mean "no more prompts", and every Bash call kept asking.
+              A caveat you already know everyone hits is not a tooltip. */}
+          {permissionMode === 'acceptEdits' && <p className="agent-settings-warning">{t('permAcceptEditsBashWarning')}</p>}
         </div>
       )}
     </div>

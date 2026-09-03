@@ -31,10 +31,16 @@ export function isClaudeBypassEquivalent(permissionMode: string | undefined): bo
   return permissionMode === 'bypassPermissions' || permissionMode === 'yolo';
 }
 
+// 'dontAsk' was here and is deliberately gone (2026-09-04). It could never
+// have worked in either direction: it isn't in happy-cli's own
+// VALID_PERMISSION_MODES (dist/index-BmZ4or3w.mjs:1403-1411), and
+// buildAgentMessageMeta's allowlist (lib/agentMessageMeta.ts) omits it too,
+// so picking it wrote metadata, repainted the badge as "don't ask", and sent
+// the agent nothing at all — a mode the UI claimed to be in and no process
+// ever was. Don't re-add it without a happy-cli that accepts it.
 export const CLAUDE_PERMISSION_MODES: ModeOption[] = [
   { key: 'default', name: 'default' },
   { key: 'plan', name: 'plan' },
-  { key: 'dontAsk', name: "don't ask" },
   { key: 'acceptEdits', name: 'accept edits' },
   { key: 'bypassPermissions', name: 'bypass (yolo)' },
 ];

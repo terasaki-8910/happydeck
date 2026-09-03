@@ -1475,6 +1475,27 @@ body {
   font-size: 11px;
 }
 
+/* Sits inline after a section heading to mark it as display-only, so a
+   greyed-out list reads as "this is what it launched with" rather than
+   "this control is temporarily broken". */
+.agent-settings-readonly-note {
+  margin-left: 5px;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-faint);
+}
+
+/* Amber, not red: this is a "what you picked doesn't cover as much as you
+   think" clarification, not an error or a destructive warning. */
+.agent-settings-warning {
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--accent-text);
+}
+
 .agent-settings-custom-model {
   display: flex;
   gap: 4px;
