@@ -90,3 +90,33 @@ export function parseUsage(rawStdout: string): UsageWindow[] {
   }
   return windows;
 }
+
+/**
+ * Why a parse produced no windows, so the UI can say something the user can
+ * act on instead of a flat "unrecognized".
+ *
+ * `'cost-summary'` is a specific, confirmed-in-the-wild case: `claude -p
+ * "/usage"` answering with the end-of-run cost/duration block ("Total cost:
+ * ... / Total duration ...") rather than any subscription limits. Observed
+ * live (2026-09-02) on Windows running CLI 2.1.235, while a Mac on 2.1.258
+ * returned real limits for the byte-identical command — the slash command
+ * IS recognized there (num_turns 0, no API call), it just reports something
+ * else entirely.
+ *
+ * Two causes fit that evidence equally well and the output alone cannot
+ * separate them: a CLI predating the limits-reporting `/usage`, or an
+ * API-key (Console) login, which has no 5-hour/weekly limits to report at
+ * all. The message this maps to names both rather than asserting one — do
+ * not "simplify" it into a bare version warning without new evidence.
+ */
+export type UsageParseFailure = 'cost-summary' | 'unrecognized';
+
+export function classifyUsageFailure(rawStdout: string): UsageParseFailure {
+  const resultText = extractResultText(rawStdout);
+  // Both markers, not just "Total cost:", so an unrelated future format that
+  // happens to mention cost isn't misreported as this specific case.
+  if (resultText && /^Total cost:/m.test(resultText) && /^Total duration/m.test(resultText)) {
+    return 'cost-summary';
+  }
+  return 'unrecognized';
+}

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { parseUsage, usageWindowLabel, windowKey, type UsageWindow } from '../lib/claudeUsage';
+import { classifyUsageFailure, parseUsage, usageWindowLabel, windowKey, type UsageParseFailure, type UsageWindow } from '../lib/claudeUsage';
 import { MOCK_ENABLED } from '../lib/mockData';
 import { notify } from '../lib/notifications';
 import { getClaudeUsageRaw } from '../lib/tauri';
@@ -23,6 +23,8 @@ interface UsageState {
   windows: UsageWindow[];
   fetchedAt: number | null;
   error: string | null;
+  /** Set only when a fetch SUCCEEDED but yielded no windows — distinguishes "claude answered with something else" from a thrown error. */
+  parseFailure: UsageParseFailure | null;
   loading: boolean;
   /** Highest threshold (80 or 95) already notified for a given window+reset-period, keyed by windowKey. */
   notified: Record<string, number>;
@@ -36,6 +38,7 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
   windows: [],
   fetchedAt: null,
   error: null,
+  parseFailure: null,
   loading: false,
   notified: {},
   started: false,
@@ -49,8 +52,12 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
       // altogether, specifically so the threshold/notification logic below
       // — not just the badge's numbers — is exercisable via
       // VITE_HAPPYDECK_MOCK=1 without a real Tauri runtime.
-      const windows = MOCK_ENABLED ? MOCK_WINDOWS : parseUsage(await getClaudeUsageRaw());
-      set({ windows, fetchedAt: Date.now(), error: null, loading: false });
+      const raw = MOCK_ENABLED ? null : await getClaudeUsageRaw();
+      const windows = raw === null ? MOCK_WINDOWS : parseUsage(raw);
+      // Only classify when the call itself succeeded — a thrown error takes
+      // the catch branch below and is reported on its own terms.
+      const parseFailure = windows.length === 0 && raw !== null ? classifyUsageFailure(raw) : null;
+      set({ windows, parseFailure, fetchedAt: Date.now(), error: null, loading: false });
 
       const language = useSettingsStore.getState().language;
       const notified = { ...get().notified };

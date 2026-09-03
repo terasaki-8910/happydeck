@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseUsage } from './claudeUsage';
+import { classifyUsageFailure, parseUsage } from './claudeUsage';
 
 // Captured live from `claude -p "/usage" --output-format json` during the
 // feature's own investigation (2026-08-30) — the real shape this parses.
@@ -67,5 +67,40 @@ describe('parseUsage', () => {
 
   it('tolerates surrounding whitespace/newlines', () => {
     expect(parseUsage(`\n\n  ${REAL_FIXTURE}  \n`)).toHaveLength(3);
+  });
+});
+
+// Captured verbatim from a real Windows machine (CLI 2.1.235) running the
+// exact command happydeck runs, while a Mac on 2.1.258 returned real limits
+// for the same command — see classifyUsageFailure's doc comment.
+const WINDOWS_COST_SUMMARY_FIXTURE = JSON.stringify({
+  is_error: false,
+  type: 'result',
+  subtype: 'success',
+  total_cost_usd: 0,
+  num_turns: 0,
+  result:
+    'Total cost:            $0.0000\n' +
+    'Total duration (API):  0s\n' +
+    'Total duration (wall): 0s\n' +
+    'Total code changes:    0 lines added, 0 lines removed\n' +
+    'Usage:                 0 input, 0 output, 0 cache read, 0 cache write',
+});
+
+describe('classifyUsageFailure', () => {
+  it('recognizes the real Windows cost-summary response', () => {
+    expect(parseUsage(WINDOWS_COST_SUMMARY_FIXTURE)).toEqual([]);
+    expect(classifyUsageFailure(WINDOWS_COST_SUMMARY_FIXTURE)).toBe('cost-summary');
+  });
+
+  it('does not claim cost-summary for an unrelated response that merely mentions cost', () => {
+    const fixture = JSON.stringify({ type: 'result', result: 'Total cost: something, but no duration lines here' });
+    expect(classifyUsageFailure(fixture)).toBe('unrecognized');
+  });
+
+  it('falls back to unrecognized for garbage, empty, and non-JSON input', () => {
+    expect(classifyUsageFailure('')).toBe('unrecognized');
+    expect(classifyUsageFailure('claude: command not found')).toBe('unrecognized');
+    expect(classifyUsageFailure(JSON.stringify({ type: 'result', result: 'Usage reporting is temporarily unavailable.' }))).toBe('unrecognized');
   });
 });

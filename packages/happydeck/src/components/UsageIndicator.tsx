@@ -37,6 +37,7 @@ export function UsageIndicator() {
   const showUsageIndicator = useSettingsStore((s) => s.showUsageIndicator);
   const windows = useUsageStore((s) => s.windows);
   const error = useUsageStore((s) => s.error);
+  const parseFailure = useUsageStore((s) => s.parseFailure);
   const loading = useUsageStore((s) => s.loading);
   const fetchedAt = useUsageStore((s) => s.fetchedAt);
   const refresh = useUsageStore((s) => s.refresh);
@@ -132,7 +133,7 @@ export function UsageIndicator() {
               <span className={`usage-popover-row-value ${metricClass(w.percent)}`}>{w.percent}%</span>
             </div>
           ))}
-          {noData && !error && <p className="usage-popover-error">{t('usageParseFailed')}</p>}
+          {noData && !error && <p className="usage-popover-error">{t(parseFailure === 'cost-summary' ? 'usageCostSummaryOnly' : 'usageParseFailed')}</p>}
           {error && <p className="usage-popover-error">{error}</p>}
           <div className="session-menu-divider" />
           <div className="usage-popover-footer">
