@@ -110,19 +110,20 @@ export interface AgentState {
 }
 
 /**
- * Mirrors happy-client's own sessionAllow options exactly (minus `mode`,
- * deliberately not exposed here — switching a session's whole permission
- * mode is a broader lever than "allow this one thing," already covered by
- * AgentSettingsPopover's own mode picker; bundling it into a single-tool
- * grant would silently widen scope beyond what the user asked for).
- * `decision: 'approved_for_session'` + `allowedTools` is what makes an
- * allow "sticky" for the rest of the session — see lib/permissionRequest.ts
- * for how `allowedTools` gets built.
+ * Mirrors happy-client's own sessionAllow options. `decision:
+ * 'approved_for_session'` + `allowedTools` is what makes an allow "sticky"
+ * for the rest of the session — see lib/permissionRequest.ts for how
+ * `allowedTools` gets built. `mode` is the broader lever (switches the
+ * WHOLE session's permission mode, not just one tool) — exposed here
+ * specifically for the explicit "allow everything" bypass action (user
+ * request, 2026-09-03: "もうこれはそのままyolo"), not for the generic
+ * always-allow path, which stays scoped to one tool on purpose.
  */
 export interface AllowRequestOptions {
   updatedInput?: Record<string, unknown>;
   decision?: 'approved' | 'approved_for_session';
   allowedTools?: string[];
+  mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
 }
 
 export interface LiveSession extends DecryptedSession {

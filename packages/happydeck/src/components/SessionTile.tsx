@@ -934,6 +934,27 @@ export function SessionTile({
                     {t('permissionAlwaysAllow')}
                   </button>
                 )}
+                <button
+                  type="button"
+                  className="permission-bypass"
+                  disabled={busy}
+                  title={t('permissionAllowEverythingHint')}
+                  onClick={() =>
+                    runAction(async () => {
+                      // Two separate calls, deliberately: sessionAllow's own
+                      // `mode` is what actually flips the live agent's
+                      // enforcement (confirmed via happy-cli's permission
+                      // handler — takes effect on its very next tool call),
+                      // while setAgentModes only syncs happydeck's OWN
+                      // metadata/badge so it doesn't keep showing a stale
+                      // mode after the session is already bypassed.
+                      await allowRequest(session.id, id, { mode: 'bypassPermissions' });
+                      await setAgentModes(session.id, { permissionMode: 'bypassPermissions' });
+                    })
+                  }
+                >
+                  {t('permissionAllowEverything')}
+                </button>
                 <button type="button" disabled={busy} onClick={() => runAction(() => denyRequest(session.id, id))}>
                   {t('permissionDeny')}
                 </button>

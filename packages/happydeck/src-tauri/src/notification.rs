@@ -47,9 +47,35 @@ fn focus_session(app: &AppHandle, session_id: &str) {
     let _ = app.emit(ACTIVATED_EVENT, session_id);
 }
 
-fn build(app: &AppHandle, title: &str, body: &str) -> Notification {
+fn build(app: &AppHandle, title: &str, body: &str, sound_enabled: bool) -> Notification {
     let mut notification = Notification::new();
     notification.summary(title).body(body);
+
+    // Sound is opt-IN on both platforms this app ships a notification
+    // sound on (confirmed by reading notify-rust/mac-notification-sys/
+    // tauri-winrt-notification source directly, 2026-09-03): a
+    // never-called `sound_name()` leaves macOS's NSUserNotification.soundName
+    // nil and produces Windows' own explicit `<audio silent="true"/>` toast
+    // XML. There is no separate "silent" flag beyond simply not calling
+    // this — and no volume control exists in either native framework at
+    // all, at any layer; that's a real absence, not a gap in these crates,
+    // so a volume slider is never coming to this Settings section.
+    if sound_enabled {
+        #[cfg(target_os = "macos")]
+        {
+            // The one string mac-notification-sys's ObjC bridge special-cases
+            // back into the real NSUserNotificationDefaultSoundName constant
+            // (objc/notify.m) — any other string names a specific sound file
+            // instead.
+            notification.sound_name("NSUserNotificationDefaultSoundName");
+        }
+        #[cfg(target_os = "windows")]
+        {
+            // -> winrt_notification::Sound::Default -> an empty <audio> toast
+            // element, i.e. "play the OS's own default toast sound".
+            notification.sound_name("Default");
+        }
+    }
 
     #[cfg(target_os = "macos")]
     {
@@ -100,8 +126,9 @@ pub fn notify_session(
     title: String,
     body: String,
     session_id: String,
+    sound_enabled: bool,
 ) -> Result<(), String> {
-    let notification = build(&app, &title, &body);
+    let notification = build(&app, &title, &body, sound_enabled);
 
     if PENDING_WAITERS.load(Ordering::Relaxed) >= MAX_PENDING_WAITERS {
         return notification.show().map(|_| ()).map_err(|e| e.to_string());

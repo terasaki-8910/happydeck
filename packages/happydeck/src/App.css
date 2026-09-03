@@ -1576,6 +1576,20 @@ body {
   cursor: pointer;
 }
 
+/* Colored at rest, not just on hover — same "this is the dangerous one"
+   treatment as .bulk-kill-trigger, since this is a bigger, harder-to-walk-
+   back grant than the other two buttons on this row (switches the whole
+   session's permission mode, not one tool). */
+.permission-request button.permission-bypass {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+.permission-request button.permission-bypass:hover:not(:disabled) {
+  background: var(--danger-border);
+  color: var(--danger);
+}
+
 .ask-question-card {
   display: flex;
   flex-direction: column;
@@ -2786,6 +2800,12 @@ body {
   margin: 20px 0 4px;
   font-size: 12px;
   color: var(--text-dim);
+}
+
+.settings-divider {
+  height: 1px;
+  margin: 16px 0 12px;
+  background: var(--border);
 }
 
 .settings-hint {

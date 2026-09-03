@@ -31,6 +31,21 @@ export interface NotificationPrefs {
   done: boolean;
   permission: boolean;
   question: boolean;
+  /**
+   * Whether a shown notification plays a sound. No volume control exists
+   * alongside this on purpose — neither macOS's NSUserNotification nor
+   * Windows' WinRT toast API exposes one at all (confirmed by reading
+   * mac-notification-sys/tauri-winrt-notification source directly,
+   * 2026-09-03); that's a real absence in both native frameworks, not a
+   * gap in this app, so a slider here would just be UI that does nothing.
+   *
+   * Optional, not required: zustand's persist does a shallow merge at the
+   * `notify` key itself, so a settings.json written before this field
+   * existed loads with `notify.sound === undefined`, not the initializer's
+   * `true` — every read must fall back with `?? true` (see notifications.ts
+   * and SettingsModal.tsx) rather than assume the field is always present.
+   */
+  sound?: boolean;
 }
 
 export type Language = 'en' | 'ja';
@@ -112,7 +127,7 @@ export const useSettingsStore = create<SettingsState>()(
       defaultPermissionMode: 'default',
       defaultModelMode: 'default',
       defaultEffortLevel: 'medium',
-      notify: { done: true, permission: true, question: true },
+      notify: { done: true, permission: true, question: true, sound: true },
       sshTargets: {},
       lastSpawnMachineId: null,
       lastSpawnDirectoryByMachine: {},

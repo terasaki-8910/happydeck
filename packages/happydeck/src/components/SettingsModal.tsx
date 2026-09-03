@@ -338,7 +338,7 @@ function PrivacySection() {
   const notify = useSettingsStore((s) => s.notify);
   const setNotifyPref = useSettingsStore((s) => s.setNotifyPref);
 
-  const rows: { key: keyof NotificationPrefs; labelKey: TranslationKey }[] = [
+  const rows: { key: Exclude<keyof NotificationPrefs, 'sound'>; labelKey: TranslationKey }[] = [
     { key: 'done', labelKey: 'sessionFinished' },
     { key: 'permission', labelKey: 'permissionNeeded' },
     { key: 'question', labelKey: 'questionFromAgent' },
@@ -352,6 +352,13 @@ function PrivacySection() {
       {rows.map((row) => (
         <ToggleSwitch key={row.key} checked={notify[row.key]} onChange={(value) => setNotifyPref(row.key, value)} label={t(row.labelKey)} />
       ))}
+      <div className="settings-divider" />
+      {/* Global, not a fourth peer category — governs whether any of the
+          notifications above make a sound, not whether they show at all.
+          `?? true` covers settings.json written before this field existed
+          (see NotificationPrefs.sound's own doc comment). */}
+      <ToggleSwitch checked={notify.sound ?? true} onChange={(value) => setNotifyPref('sound', value)} label={t('notifySound')} />
+      <p className="settings-hint">{t('notifySoundHint')}</p>
     </div>
   );
 }

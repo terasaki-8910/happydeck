@@ -1,5 +1,15 @@
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { invoke } from '@tauri-apps/api/core';
+import { isMac } from './platform';
+import { useSettingsStore } from '../store/settingsStore';
+
+// The plugin's `sound` field round-trips through the same notify-rust
+// `Notification::sound_name()` the Rust-side notify_session command calls
+// directly (confirmed by reading tauri-plugin-notification's desktop.rs,
+// 2026-09-03) — so it needs the identical platform-specific magic string,
+// resolved here in JS since this call has no Rust command of its own to
+// branch on target_os inside.
+const PLUGIN_SOUND_NAME = isMac ? 'NSUserNotificationDefaultSoundName' : 'Default';
 
 let permissionGranted: boolean | null = null;
 
@@ -31,13 +41,16 @@ export async function notify(title: string, body: string, sessionId?: string): P
   if (!(await ensureNotificationPermission())) {
     return;
   }
+  // `?? true` covers a settings.json written before this field existed —
+  // see NotificationPrefs.sound's own doc comment.
+  const soundEnabled = useSettingsStore.getState().notify.sound ?? true;
   if (sessionId) {
     try {
-      await invoke('notify_session', { title, body, sessionId });
+      await invoke('notify_session', { title, body, sessionId, soundEnabled });
       return;
     } catch (error) {
       console.warn('[notifications] clickable notification failed, falling back to plugin:', error);
     }
   }
-  sendNotification({ title, body });
+  sendNotification({ title, body, sound: soundEnabled ? PLUGIN_SOUND_NAME : undefined });
 }
