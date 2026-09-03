@@ -70,9 +70,10 @@ describe('parseUsage', () => {
   });
 });
 
-// Captured verbatim from a real Windows machine (CLI 2.1.235) running the
-// exact command happydeck runs, while a Mac on 2.1.258 returned real limits
-// for the same command — see classifyUsageFailure's doc comment.
+// Captured verbatim from a real Windows machine whose claude login had gone
+// stale, running the exact command happydeck runs. Re-running
+// `claude auth login` there made the same CLI return real limits — see
+// classifyUsageFailure's doc comment for the hypotheses this ruled out.
 const WINDOWS_COST_SUMMARY_FIXTURE = JSON.stringify({
   is_error: false,
   type: 'result',

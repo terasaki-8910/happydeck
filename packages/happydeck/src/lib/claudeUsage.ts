@@ -97,17 +97,19 @@ export function parseUsage(rawStdout: string): UsageWindow[] {
  *
  * `'cost-summary'` is a specific, confirmed-in-the-wild case: `claude -p
  * "/usage"` answering with the end-of-run cost/duration block ("Total cost:
- * ... / Total duration ...") rather than any subscription limits. Observed
- * live (2026-09-02) on Windows running CLI 2.1.235, while a Mac on 2.1.258
- * returned real limits for the byte-identical command — the slash command
- * IS recognized there (num_turns 0, no API call), it just reports something
- * else entirely.
+ * ... / Total duration ...") rather than any subscription limits. The slash
+ * command IS recognized (num_turns 0, no API call, exit 0) — it just has no
+ * subscription info to report and silently degrades to local cost stats.
  *
- * Two causes fit that evidence equally well and the output alone cannot
- * separate them: a CLI predating the limits-reporting `/usage`, or an
- * API-key (Console) login, which has no 5-hour/weekly limits to report at
- * all. The message this maps to names both rather than asserting one — do
- * not "simplify" it into a bare version warning without new evidence.
+ * **Cause, confirmed by the user 2026-09-03: a stale login.** Re-running
+ * `claude auth login` on the affected machine restored real limits
+ * immediately. Two earlier hypotheses were both DISPROVEN on that same
+ * machine and should not be reintroduced without new evidence:
+ *  - "CLI too old": it was 2.1.235 (vs a working Mac's 2.1.258) and
+ *    `claude update` had failed, so it was still 2.1.235 when re-login
+ *    fixed it — the version was never the problem.
+ *  - "API-key login has no limits to report": `ANTHROPIC_API_KEY` was
+ *    confirmed unset there.
  */
 export type UsageParseFailure = 'cost-summary' | 'unrecognized';
 
