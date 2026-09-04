@@ -2343,15 +2343,24 @@ body {
   border-color: var(--accent);
 }
 
+/* Explicit areas rather than auto-placement: the two text lines stack in
+   one column while the remote-control button sits beside them spanning
+   both rows, which source-order auto-placement can't express. */
 .tile-composer-caption {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'path remote'
+    'modes remote';
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 1px;
   padding: 2px 4px 0;
   min-width: 0;
 }
 
 .tile-composer-caption-path {
+  grid-area: path;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2361,8 +2370,29 @@ body {
 }
 
 .tile-composer-caption-modes {
+  grid-area: modes;
   color: var(--text-faint);
   font-size: 10.5px;
+}
+
+/* Same muted weight as the caption text it sits in — this is a shortcut,
+   not a primary action, and it carries no state (see the JSX comment). */
+.tile-composer-caption-remote {
+  grid-area: remote;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tile-composer-caption-remote:hover {
+  color: var(--text);
+  background: var(--bg);
 }
 
 .slash-autocomplete {
