@@ -284,3 +284,26 @@ Three limits that are upstream in happy-cli, not fixable in happydeck:
 Also worth knowing: `acceptEdits` covers Edit/MultiEdit/Write/NotebookEdit
 only — `getToolDescriptor` (:1829) gives Bash `edit:false`, so Bash keeps
 prompting. That is Claude Code's own semantics, not a bug.
+
+## Usage-cache follow-ups (2026-09-08, happydeck)
+
+Deferred while switching the usage badge off `claude -p "/usage"` and onto
+`~/.claude.json`'s `cachedUsageUtilization` (packages/happydeck/src-tauri/src/claude_usage.rs):
+
+- **`CLAUDE_CONFIG_DIR` is not honoured.** The path is hardcoded to
+  `$HOME/.claude.json`. Claude Code supports relocating its config dir, but
+  whether `.claude.json` itself moves with it is UNVERIFIED — don't add a
+  candidate path on a guess. Note that a GUI-launched Tauri app does not
+  inherit that env var from the user's shell profile anyway (same class of
+  problem as the PATH issue the old subprocess code had), so honouring it
+  would need reading it from somewhere else regardless.
+- **`severity` in the payload is ignored.** Each limit carries its own
+  `severity` ("normal" seen live; the rest of the enum is unknown), which
+  the account API presumably keeps in sync with real thresholds. happydeck
+  still uses its own hardcoded 80/95. Worth switching if the enum's full
+  range can be confirmed — until then, guessing at unseen values would be
+  worse than the fixed thresholds.
+- **`~/.claude/projects/**/*.jsonl` cleanup.** ~274 sub-6KB session
+  transcripts (~1MB) accumulated from the old approach — one empty session
+  per poll, 500+/day. Nothing creates them any more. Deleting them is a
+  user call, not something to do automatically.

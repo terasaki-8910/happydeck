@@ -127,6 +127,35 @@ export function localMachineIdTimeoutError(language: Language): string {
 
 export function claudeUsageTimeoutError(language: Language): string {
   return language === 'ja'
-    ? 'claude CLIから使用量を取得する処理がタイムアウトしました。claude CLIがこのMacにインストールされ、ログイン済みであることを確認してください。'
-    : 'Fetching usage from the claude CLI timed out. Make sure the claude CLI is installed and logged in on this Mac.';
+    ? '~/.claude.json からの使用量の読み込みがタイムアウトしました。ローカルファイルの読み込みなので、Tauriのipcブリッジ自体が固まっている可能性が高いです。'
+    : 'Reading usage from ~/.claude.json timed out. This is a plain local file read, so the Tauri IPC bridge itself is the likely culprit.';
+}
+
+/**
+ * Turns the stable failure codes src-tauri/src/claude_usage.rs returns into
+ * something the user can act on. An unrecognized code falls through
+ * verbatim rather than being swallowed — a Rust-side message we haven't
+ * localized yet is still far more useful on screen than a generic one.
+ */
+export function localizeUsageError(language: Language, raw: string): string {
+  const code = raw.split(':', 1)[0].trim();
+  switch (code) {
+    case 'missing-file':
+      return language === 'ja'
+        ? '~/.claude.json が見つかりません。このマシンでClaude Codeがまだ一度も実行されていないようです。'
+        : "~/.claude.json doesn't exist — Claude Code appears to have never run on this machine.";
+    case 'no-usage-data':
+      return language === 'ja'
+        ? 'Claude Codeが使用量をまだキャッシュしていません（~/.claude.json に cachedUsageUtilization がありません）。ログインが切れているか、Claude Codeが古い可能性があります。'
+        : "Claude Code hasn't cached any usage yet (no cachedUsageUtilization in ~/.claude.json) — its login may have gone stale, or the CLI may be too old to write it.";
+    case 'corrupt':
+      // The CLI rewrites this file wholesale, so a read can land mid-write.
+      // The Rust side already retries; reaching here means every retry lost
+      // the race, which the next poll routinely fixes on its own.
+      return language === 'ja'
+        ? '~/.claude.json の読み込み中に書き換えが発生しました。次回の取得で自動的に回復します。'
+        : '~/.claude.json was being rewritten while it was read. The next poll normally recovers on its own.';
+    default:
+      return raw;
+  }
 }

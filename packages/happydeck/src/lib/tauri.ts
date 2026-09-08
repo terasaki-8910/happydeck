@@ -9,10 +9,11 @@ export interface StoredCredentials {
 }
 
 const KEYCHAIN_TIMEOUT_MS = 15_000;
-// `claude -p "/usage"` measured at ~3.5s live; this is headroom to catch a
-// genuine hang (e.g. the resolved binary path no longer exists), not a
-// budget it's expected to approach in normal operation.
-const CLAUDE_USAGE_TIMEOUT_MS = 20_000;
+// Reading ~/.claude.json is sub-millisecond plus up to ~120ms of torn-write
+// retries (see src-tauri/src/claude_usage.rs). This is headroom to catch a
+// stuck IPC bridge, not a budget the read is expected to approach — it used
+// to be 20s, back when every poll spawned a ~3.5s `claude -p "/usage"`.
+const CLAUDE_USAGE_TIMEOUT_MS = 5_000;
 
 /**
  * invoke() has no built-in timeout — unlike fetch(), a hung Rust-side call
@@ -69,10 +70,10 @@ export function positionTrafficLights(titlebarHeight: number): void {
 }
 
 /**
- * Raw stdout of `claude -p "/usage" --output-format json`, via the Rust
- * bridge (src-tauri/src/claude_usage.rs). Deliberately returns the
- * unparsed string — see src/lib/claudeUsage.ts for why parsing lives on
- * this side instead.
+ * Claude Code's own `cachedUsageUtilization` blob, read straight out of
+ * ~/.claude.json by the Rust bridge (src-tauri/src/claude_usage.rs).
+ * Deliberately returns the unparsed JSON string — see
+ * src/lib/claudeUsage.ts for why the mapping lives on this side instead.
  */
 export async function getClaudeUsageRaw(): Promise<string> {
   return withTauriTimeout(invoke<string>('claude_usage'), claudeUsageTimeoutError(useSettingsStore.getState().language), CLAUDE_USAGE_TIMEOUT_MS);

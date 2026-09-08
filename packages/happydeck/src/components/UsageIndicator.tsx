@@ -1,24 +1,48 @@
 import { useEffect, useRef, useState } from 'react';
 import { LuBrain, LuCalendarDays, LuGauge, LuTimer } from 'react-icons/lu';
-import { usageWindowLabel, windowKey, type UsageWindow } from '../lib/claudeUsage';
+import { formatResetTime, isWindowExpired, usageWindowLabel, windowKey, type UsageWindow } from '../lib/claudeUsage';
 import { useT } from '../lib/i18n';
 import { useSettingsStore } from '../store/settingsStore';
 import { useUsageStore } from '../store/usageStore';
 
-function metricClass(percent: number): string {
+function metricClass(percent: number, expired = false): string {
+  // An expired window's percentage is stale, so it must not carry amber/red
+  // either — the color is as much of a claim as the number.
+  if (expired) return '';
   if (percent >= 95) return 'usage-indicator-metric-danger';
   if (percent >= 80) return 'usage-indicator-metric-warn';
   return '';
 }
 
-function formatUpdated(language: 'en' | 'ja', fetchedAt: number): string {
-  const time = new Date(fetchedAt).toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'en-US', { hour: 'numeric', minute: '2-digit' });
-  return language === 'ja' ? `最終取得 ${time}` : `Last fetched ${time}`;
+/**
+ * Reports when the CLI last refreshed these numbers, not when happydeck
+ * last read the file. Since the switch to reading ~/.claude.json the read
+ * time says nothing useful — it's always seconds ago — while the data
+ * behind it only moves when a Claude Code session is actually running.
+ * Includes the date once the reading isn't from today, because a bare
+ * "16:18" on day-old numbers reads as fresh.
+ */
+function formatMeasured(language: 'en' | 'ja', measuredAt: number): string {
+  const locale = language === 'ja' ? 'ja-JP' : 'en-US';
+  const when = new Date(measuredAt);
+  const sameDay = when.toDateString() === new Date().toDateString();
+  const stamp = when.toLocaleString(locale, sameDay ? { hour: 'numeric', minute: '2-digit' } : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return language === 'ja' ? `${stamp} 時点` : `Measured ${stamp}`;
+}
+
+/**
+ * A window past its reset time shows "—" rather than its cached
+ * percentage: that number belongs to the window before the reset, and
+ * nothing will correct it until a Claude Code session runs and refreshes
+ * the cache. Showing a stale 87% is worse than showing nothing.
+ */
+function metricText(w: UsageWindow, expired: boolean): string {
+  return expired ? '—' : `${w.percent}%`;
 }
 
 /**
  * Titlebar badge for Claude Code's account-wide usage limits (5h session +
- * weekly window(s)), fed by shelling out to `claude -p "/usage"` — see
+ * weekly window(s)), read from the CLI's own cache in ~/.claude.json — see
  * src/store/usageStore.ts. Deliberately a text badge, not two separate
  * icon+text badges like AgentSettingsPopover: this is one glanceable status
  * reading, not two independent settings to toggle.
@@ -40,6 +64,7 @@ export function UsageIndicator() {
   const parseFailure = useUsageStore((s) => s.parseFailure);
   const loading = useUsageStore((s) => s.loading);
   const fetchedAt = useUsageStore((s) => s.fetchedAt);
+  const measuredAt = useUsageStore((s) => s.measuredAt);
   const refresh = useUsageStore((s) => s.refresh);
 
   const [open, setOpen] = useState(false);
@@ -66,11 +91,12 @@ export function UsageIndicator() {
   }, [open]);
 
   if (!showUsageIndicator) return null;
-  // Nothing has SETTLED yet (first ~3.5s after launch) — avoid a flash of a
-  // placeholder badge before the initial request resolves one way or
-  // another. Gated on fetchedAt, not on windows.length: a request that
-  // completed without throwing but parsed zero windows (an unrecognized
-  // response shape — see the parse-failed message below) must still show
+  // Nothing has SETTLED yet — avoid a flash of a placeholder badge before
+  // the initial read resolves one way or another. (Far briefer now that
+  // this is a file read rather than a ~3.5s subprocess, but a first paint
+  // still beats it.) Gated on fetchedAt, not on windows.length: a read that
+  // completed without throwing but produced zero windows (an unrecognized
+  // cache shape — see the parse-failed message below) must still show
   // SOMETHING, or it's indistinguishable from "disabled in Settings" or
   // "still loading" and unreportable when it happens (confirmed report,
   // 2026-09-02: a Windows build that could genuinely no longer launch
@@ -80,7 +106,10 @@ export function UsageIndicator() {
   const noData = windows.length === 0;
   const sessionWindow = windows.find((w): w is Extract<UsageWindow, { kind: 'session' }> => w.kind === 'session');
   const weekWindows = windows.filter((w): w is Extract<UsageWindow, { kind: 'week' }> => w.kind === 'week');
-  const primaryWeek = weekWindows[0] ?? null;
+  // The aggregate cap by identity, not by position: the cache's `limits[]`
+  // order is the API's, not something to depend on. Falls back to the first
+  // weekly window for an account that only has scoped ones.
+  const primaryWeek = weekWindows.find((w) => w.modelLabel === null) ?? weekWindows[0] ?? null;
   // See the module doc above — a deliberate, named exception, expected to
   // naturally stop rendering (fableWeek just stays null) once the CLI no
   // longer reports this window. The `!== primaryWeek` guard avoids showing
@@ -98,23 +127,23 @@ export function UsageIndicator() {
         ) : (
           <>
             {sessionWindow && (
-              <span className={`usage-indicator-metric ${metricClass(sessionWindow.percent)}`}>
+              <span className={`usage-indicator-metric ${metricClass(sessionWindow.percent, isWindowExpired(sessionWindow))}`}>
                 <LuTimer size={12} strokeWidth={2} />
-                {sessionWindow.percent}%
+                {metricText(sessionWindow, isWindowExpired(sessionWindow))}
               </span>
             )}
             {sessionWindow && primaryWeek && <span className="usage-indicator-sep">·</span>}
             {primaryWeek && (
-              <span className={`usage-indicator-metric ${metricClass(primaryWeek.percent)}`}>
+              <span className={`usage-indicator-metric ${metricClass(primaryWeek.percent, isWindowExpired(primaryWeek))}`}>
                 <LuCalendarDays size={12} strokeWidth={2} />
-                {primaryWeek.percent}%
+                {metricText(primaryWeek, isWindowExpired(primaryWeek))}
               </span>
             )}
             {primaryWeek && fableWeek && <span className="usage-indicator-sep">·</span>}
             {fableWeek && (
-              <span className={`usage-indicator-metric ${metricClass(fableWeek.percent)}`}>
+              <span className={`usage-indicator-metric ${metricClass(fableWeek.percent, isWindowExpired(fableWeek))}`}>
                 <LuBrain size={12} strokeWidth={2} />
-                {fableWeek.percent}%
+                {metricText(fableWeek, isWindowExpired(fableWeek))}
               </span>
             )}
           </>
@@ -124,20 +153,28 @@ export function UsageIndicator() {
       {open && (
         <div className="session-menu-popover usage-popover" onClick={(event) => event.stopPropagation()}>
           <span className="session-menu-label">{t('usageTitle')}</span>
-          {windows.map((w) => (
-            <div className="usage-popover-row" key={windowKey(w)}>
-              <span className="usage-popover-row-label">
-                {usageWindowLabel(language, w)}
-                <span className="usage-popover-resets">{language === 'ja' ? `${w.resets} にリセット` : `resets ${w.resets}`}</span>
-              </span>
-              <span className={`usage-popover-row-value ${metricClass(w.percent)}`}>{w.percent}%</span>
-            </div>
-          ))}
-          {noData && !error && <p className="usage-popover-error">{t(parseFailure === 'cost-summary' ? 'usageCostSummaryOnly' : 'usageParseFailed')}</p>}
+          {windows.map((w) => {
+            const expired = isWindowExpired(w);
+            const resets = formatResetTime(language, w.resetsAt);
+            // Not every window carries a reset time — a per-model weekly cap
+            // arrives with resets_at: null. Dropping the line entirely beats
+            // an empty one under the label.
+            const resetsText = expired ? t('usageExpired') : resets ? (language === 'ja' ? `${resets} にリセット` : `resets ${resets}`) : null;
+            return (
+              <div className="usage-popover-row" key={windowKey(w)}>
+                <span className="usage-popover-row-label">
+                  {usageWindowLabel(language, w)}
+                  {resetsText && <span className="usage-popover-resets">{resetsText}</span>}
+                </span>
+                <span className={`usage-popover-row-value ${metricClass(w.percent, expired)}`}>{metricText(w, expired)}</span>
+              </div>
+            );
+          })}
+          {noData && !error && <p className="usage-popover-error">{t(parseFailure === 'no-limits' ? 'usageNoLimits' : 'usageParseFailed')}</p>}
           {error && <p className="usage-popover-error">{error}</p>}
           <div className="session-menu-divider" />
           <div className="usage-popover-footer">
-            <span className="usage-popover-updated">{fetchedAt ? formatUpdated(language, fetchedAt) : ''}</span>
+            <span className="usage-popover-updated">{measuredAt ? formatMeasured(language, measuredAt) : ''}</span>
             <button type="button" className="usage-popover-refresh" disabled={loading} onClick={() => refresh()}>
               {t('usageRefreshButton')}
             </button>
