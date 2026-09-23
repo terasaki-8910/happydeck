@@ -76,6 +76,17 @@ export const TERMINAL_WINDOW_MODE_LABELS: Record<TerminalWindowMode, string> = {
   window: 'New window',
 };
 
+// Sort applies globally across every machine's directory browser, not
+// per-machine — it's a preference about how the list reads, not something
+// tied to any one filesystem.
+export type DirectorySortKey = 'name' | 'modified';
+export type DirectorySortDirection = 'asc' | 'desc';
+
+export interface DirectorySort {
+  key: DirectorySortKey;
+  direction: DirectorySortDirection;
+}
+
 interface SettingsState {
   theme: Theme;
   font: FontChoice;
@@ -104,6 +115,7 @@ interface SettingsState {
   // usageStore polls at all — a user who turns this off shouldn't still
   // pay for a `claude` subprocess every 3 minutes in the background.
   showUsageIndicator: boolean;
+  directoryBrowserSort: DirectorySort;
   setTheme: (theme: Theme) => void;
   setFont: (font: FontChoice) => void;
   setLanguage: (language: Language) => void;
@@ -114,6 +126,7 @@ interface SettingsState {
   setSshTarget: (machineId: string, target: string) => void;
   setLastSpawnLocation: (machineId: string, directory: string) => void;
   setShowUsageIndicator: (show: boolean) => void;
+  setDirectoryBrowserSort: (sort: DirectorySort) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -132,6 +145,7 @@ export const useSettingsStore = create<SettingsState>()(
       lastSpawnMachineId: null,
       lastSpawnDirectoryByMachine: {},
       showUsageIndicator: true,
+      directoryBrowserSort: { key: 'name', direction: 'asc' },
       setTheme: (theme) => set({ theme }),
       setFont: (font) => set({ font }),
       setLanguage: (language) => set({ language }),
@@ -157,6 +171,7 @@ export const useSettingsStore = create<SettingsState>()(
           lastSpawnDirectoryByMachine: { ...state.lastSpawnDirectoryByMachine, [machineId]: directory },
         })),
       setShowUsageIndicator: (showUsageIndicator) => set({ showUsageIndicator }),
+      setDirectoryBrowserSort: (directoryBrowserSort) => set({ directoryBrowserSort }),
     }),
     { name: 'happydeck-settings', storage: createJSONStorage(() => createTauriFileStorage('settings.json')) },
   ),

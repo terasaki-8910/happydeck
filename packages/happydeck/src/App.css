@@ -2738,6 +2738,41 @@ body {
   cursor: default;
 }
 
+.browser-sort-row {
+  display: flex;
+  gap: 6px;
+}
+
+.browser-sort-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.browser-sort-direction {
+  flex-shrink: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 6px 10px;
+  cursor: pointer;
+  min-width: 32px;
+}
+
+.browser-sort-select:hover,
+.browser-sort-direction:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
 .browser-entries {
   height: 280px;
   overflow-y: auto;

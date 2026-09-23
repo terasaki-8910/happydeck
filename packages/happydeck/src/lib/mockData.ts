@@ -234,7 +234,10 @@ export function mockListDirectory(path: string): ListDirectoryResult {
   }
   return {
     success: true,
-    entries: children.map((name) => ({ name, type: 'directory', size: 0, modified: now })),
+    // Staggered, not all `now` — a mock modified time that's identical
+    // across every entry would make "sort by date modified" untestable
+    // (every ordering would look equally correct).
+    entries: children.map((name, index) => ({ name, type: 'directory', size: 0, modified: now - index * 3_600_000 })),
   };
 }
 

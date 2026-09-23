@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DirectoryEntry } from 'happy-client';
 import { useT } from '../lib/i18n';
 import { joinPath, parentPath } from '../lib/paths';
 import { useHappyStore } from '../store/happyStore';
+import { useSettingsStore, type DirectorySort, type DirectorySortKey } from '../store/settingsStore';
+
+/** Secondary key is always name-ascending, regardless of the primary direction — keeps entries with an equal primary value (e.g. same `modified`) in a stable, predictable order instead of arbitrary fetch order. */
+function compareEntries(a: DirectoryEntry, b: DirectoryEntry, sort: DirectorySort): number {
+  const primary = sort.key === 'modified' ? a.modified - b.modified : a.name.localeCompare(b.name);
+  const signed = sort.direction === 'asc' ? primary : -primary;
+  return signed !== 0 ? signed : a.name.localeCompare(b.name);
+}
 
 interface DirectoryBrowserProps {
   machineId: string;
@@ -23,6 +31,8 @@ export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onC
   const t = useT();
   const listMachineDirectory = useHappyStore((s) => s.listMachineDirectory);
   const createMachineDirectory = useHappyStore((s) => s.createMachineDirectory);
+  const sort = useSettingsStore((s) => s.directoryBrowserSort);
+  const setSort = useSettingsStore((s) => s.setDirectoryBrowserSort);
   const [path, setPath] = useState(startPath);
   const [entries, setEntries] = useState<DirectoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +49,7 @@ export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onC
       if (cancelled) return;
       setLoading(false);
       if (result.success) {
-        setEntries([...result.entries].filter((e) => e.type === 'directory').sort((a, b) => a.name.localeCompare(b.name)));
+        setEntries(result.entries.filter((e) => e.type === 'directory'));
       } else {
         setEntries(null);
         setError(result.error);
@@ -49,6 +59,8 @@ export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onC
       cancelled = true;
     };
   }, [machineId, path, listMachineDirectory]);
+
+  const sortedEntries = useMemo(() => (entries ? [...entries].sort((a, b) => compareEntries(a, b, sort)) : null), [entries, sort]);
 
   const submitNewFolder = async () => {
     const name = newFolderName.trim();
@@ -129,12 +141,31 @@ export function DirectoryBrowser({ machineId, platform, startPath, onSelect, onC
           </div>
         )}
 
+        <div className="browser-sort-row">
+          <select
+            className="browser-sort-select"
+            value={sort.key}
+            onChange={(event) => setSort({ ...sort, key: event.target.value as DirectorySortKey })}
+          >
+            <option value="name">{t('browserSortName')}</option>
+            <option value="modified">{t('browserSortModified')}</option>
+          </select>
+          <button
+            type="button"
+            className="browser-sort-direction"
+            title={sort.direction === 'asc' ? t('browserSortAscending') : t('browserSortDescending')}
+            onClick={() => setSort({ ...sort, direction: sort.direction === 'asc' ? 'desc' : 'asc' })}
+          >
+            {sort.direction === 'asc' ? '↑' : '↓'}
+          </button>
+        </div>
+
         <div className="browser-entries">
           {loading && <p className="app-message">{t('browserLoading')}</p>}
           {error && <p className="app-message app-message-error">{error}</p>}
-          {!loading && !error && entries?.length === 0 && <p className="app-message">{t('browserNoSubdirectories')}</p>}
+          {!loading && !error && sortedEntries?.length === 0 && <p className="app-message">{t('browserNoSubdirectories')}</p>}
           {!loading &&
-            entries?.map((entry) => (
+            sortedEntries?.map((entry) => (
               <button key={entry.name} type="button" className="browser-entry" onClick={() => setPath(joinPath(path, entry.name))}>
                 <svg className="browser-entry-icon" viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true">
                   <path d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.379a1.5 1.5 0 0 1 1.06.44l1.122 1.12A1.5 1.5 0 0 0 9.62 3.5H13A1.5 1.5 0 0 1 14.5 5v7A1.5 1.5 0 0 1 13 13.5H3A1.5 1.5 0 0 1 1.5 12V3Z" />
