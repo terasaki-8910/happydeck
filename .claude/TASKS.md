@@ -307,3 +307,33 @@ Deferred while switching the usage badge off `claude -p "/usage"` and onto
   transcripts (~1MB) accumulated from the old approach — one empty session
   per poll, 500+/day. Nothing creates them any more. Deleting them is a
   user call, not something to do automatically.
+
+## Usage cache: the CLI does not refresh it on its own (2026-09-24, happydeck)
+
+Supersedes the premise of the 2026-09-08 section above. That commit assumed
+`cachedUsageUtilization` is "refreshed from the account API while a session
+runs". Measured on this Mac, that is not true for this user's workflow:
+
+- `~/.claude.json`'s mtime was current to the second while
+  `cachedUsageUtilization.fetchedAtMs` sat ~12 hours stale. The CLI rewrites
+  that file constantly for unrelated reasons but refreshes the usage key on
+  its own, much rarer schedule.
+- `claude -p "hi"` does NOT move `fetchedAtMs` (tested, unchanged).
+- `claude -p "/usage"` DOES (tested, 11:52 -> 00:00).
+
+Every session here is spawned through happy-cli's SDK wrapper, which never
+takes whatever path refreshes that key — so the 5-hour window silently
+passed its `resets_at` and rendered "—" indefinitely, and "Refresh now"
+(a plain re-read of an unchanged file) could not fix it.
+
+Fixed by `refresh_claude_usage` (src-tauri/src/claude_usage.rs): the same
+`claude -p "/usage"` subprocess as v0.4.x-0.5.1, but on demand only —
+the explicit button, plus an auto-retry gated on an actually-expired window
+with a 10-minute cooldown. The 30s poll stays a free file read, so the
+500+/day process churn the 2026-09-08 commit removed does not come back.
+
+Still open from that earlier section: `CLAUDE_CONFIG_DIR` is still not
+honoured, `severity` is still ignored in favour of hardcoded 80/95, and the
+~274 junk transcripts from the old always-on subprocess are still
+un-deleted (a user call). Note the refresh path creates one such transcript
+per invocation again, but at on-demand frequency rather than 500/day.

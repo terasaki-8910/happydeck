@@ -131,6 +131,12 @@ export function claudeUsageTimeoutError(language: Language): string {
     : 'Reading usage from ~/.claude.json timed out. This is a plain local file read, so the Tauri IPC bridge itself is the likely culprit.';
 }
 
+export function claudeUsageRefreshTimeoutError(language: Language): string {
+  return language === 'ja'
+    ? '使用量の更新（claude -p "/usage"）がタイムアウトしました。Claude Codeの起動に時間がかかっているか、アカウントAPIに到達できていない可能性があります。'
+    : 'Refreshing usage (claude -p "/usage") timed out. Claude Code may be slow to start, or unable to reach the account API.';
+}
+
 /**
  * Turns the stable failure codes src-tauri/src/claude_usage.rs returns into
  * something the user can act on. An unrecognized code falls through

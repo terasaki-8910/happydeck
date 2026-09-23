@@ -20,12 +20,19 @@
 //! was a stale login, which the subprocess path did not fix either — it
 //! reported a cost summary instead. Re-login fixed both.
 //!
+//! BUT the cache does have to be refreshable on demand, which is what
+//! `refresh_claude_usage` below is for — see its own doc for the measured
+//! reason. That is a deliberate, bounded partial return of the subprocess
+//! this module otherwise exists to avoid: on demand only, never per poll.
+//!
 //! The frontend does the interpretation (see src/lib/claudeUsage.ts) so
 //! the mapping stays unit-testable without a Tauri runtime; this module
 //! only extracts the subtree.
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::Mutex;
 
 /// `~/.claude.json` is rewritten wholesale by the CLI — and often, for
 /// reasons unrelated to usage (project history, MCP state; its mtime is
@@ -106,6 +113,188 @@ pub async fn claude_usage() -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || read_usage_json(&path))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// Caches the resolved `claude` binary path across calls so the PATH probe
+/// in `resolve_claude_path` only runs once per app launch. Only
+/// `refresh_claude_usage` uses it — the ordinary read path is a plain file
+/// read and needs no binary at all.
+pub struct ClaudePath(pub Mutex<Option<PathBuf>>);
+
+/// Base `Command` with the platform's "don't flash a console window" flag
+/// applied. Without `CREATE_NO_WINDOW` on Windows, a refresh (and the
+/// `where` probe) pops a visible console window in front of the user.
+fn quiet_command(program: &Path) -> Command {
+    #[allow(unused_mut)]
+    let mut command = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
+/// A GUI-launched Tauri app inherits macOS's minimal system PATH
+/// (`/etc/paths` + `/etc/paths.d`), not the user's shell profile — a bare
+/// `Command::new("claude")` that works fine from a terminal can silently
+/// fail to spawn from the packaged app. Falling back to a login shell
+/// (`$SHELL -lc 'command -v claude'`) sources the user's actual profile and
+/// therefore sees whatever PATH their own terminal sees, covering
+/// nvm/asdf/custom-prefix installs the fixed list doesn't anticipate.
+#[cfg(not(target_os = "windows"))]
+fn resolve_claude_path(home: &str) -> PathBuf {
+    let candidates = [
+        PathBuf::from(home).join(".local/bin/claude"),
+        PathBuf::from("/opt/homebrew/bin/claude"),
+        PathBuf::from("/usr/local/bin/claude"),
+    ];
+    for candidate in candidates {
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    if let Ok(output) = Command::new(&shell).arg("-lc").arg("command -v claude").output() {
+        if output.status.success() {
+            if let Some(line) = String::from_utf8_lossy(&output.stdout).lines().next() {
+                let path = line.trim();
+                if !path.is_empty() {
+                    return PathBuf::from(path);
+                }
+            }
+        }
+    }
+    PathBuf::from("claude")
+}
+
+/// Windows needs a different strategy, and a bare `Command::new("claude")`
+/// fails here for a reason unrelated to PATH: Rust's `Command` appends only
+/// `.exe` when resolving a bare program name — it does NOT consult
+/// `PATHEXT` — so an npm-shim install (`claude.cmd`) is invisible to it even
+/// when `claude` runs fine in the user's own terminal. That was exactly the
+/// failure reported against v0.4.0 ("program not found").
+///
+/// Unlike macOS, a GUI-launched process on Windows DOES inherit the full
+/// user+system PATH from the registry, so no login-shell dance is needed —
+/// `where.exe` (which honours PATHEXT) is the reliable probe.
+#[cfg(target_os = "windows")]
+fn resolve_claude_path(home: &str) -> PathBuf {
+    let mut candidates = vec![PathBuf::from(home).join(r".local\bin\claude.exe")];
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        candidates.push(PathBuf::from(&local_app_data).join(r"Programs\claude\claude.exe"));
+    }
+    if let Ok(app_data) = std::env::var("APPDATA") {
+        candidates.push(PathBuf::from(&app_data).join(r"npm\claude.exe"));
+        candidates.push(PathBuf::from(&app_data).join(r"npm\claude.cmd"));
+    }
+    for candidate in candidates {
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    // `where` prints EVERY match, one per line, and that order is not a
+    // preference order. An npm global install produces both an
+    // extensionless `claude` (a bash script, for Git Bash/WSL) and
+    // `claude.cmd` — and the bash script sorts FIRST. CreateProcess cannot
+    // launch a shell script, so taking the first line would pick the one
+    // file here that definitely does not work.
+    if let Ok(output) = quiet_command(Path::new("where")).arg("claude").output() {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let runnable: Vec<&str> = stdout
+                .lines()
+                .map(str::trim)
+                .filter(|line| {
+                    let lower = line.to_ascii_lowercase();
+                    lower.ends_with(".exe") || lower.ends_with(".cmd") || lower.ends_with(".bat")
+                })
+                .collect();
+            if let Some(exe) = runnable.iter().find(|m| m.to_ascii_lowercase().ends_with(".exe")) {
+                return PathBuf::from(exe);
+            }
+            if let Some(first) = runnable.first() {
+                return PathBuf::from(first);
+            }
+        }
+    }
+    PathBuf::from("claude")
+}
+
+fn run_usage_refresh(cached_path: Option<PathBuf>, home: String) -> (Result<(), String>, Option<PathBuf>) {
+    let path = cached_path.unwrap_or_else(|| resolve_claude_path(&home));
+
+    // A `.cmd` is a batch script rather than an image CreateProcess can
+    // launch, but this deliberately does NOT wrap it in `cmd.exe /C` by
+    // hand: since Rust 1.77.2 `Command` detects a .bat/.cmd program and
+    // routes it through cmd.exe itself, applying the cmd-specific argument
+    // escaping that CVE-2024-24576 was filed over. Let std do it.
+    let output = quiet_command(&path)
+        .arg("-p")
+        .arg("/usage")
+        .arg("--output-format")
+        .arg("json")
+        .current_dir(&home)
+        .output();
+
+    let output = match output {
+        Ok(output) => output,
+        // The cached path stopped working (e.g. `claude update` moved the
+        // binary) — drop the cache so the next call re-resolves instead of
+        // repeating the same failure forever.
+        Err(e) => return (Err(format!("failed to launch claude at {}: {e}", path.display())), None),
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        // Also drops the cached path: a batch shim whose target has moved
+        // reports "not recognized" on stderr with a non-zero status rather
+        // than failing to spawn, so a stale cache has to be dropped here too.
+        let message = if stderr.is_empty() {
+            format!("claude at {} exited with {}", path.display(), output.status)
+        } else {
+            stderr
+        };
+        return (Err(message), None);
+    }
+
+    // stdout is deliberately discarded. The command's whole value is its
+    // SIDE EFFECT — it makes the CLI re-fetch the account API and rewrite
+    // `cachedUsageUtilization` — after which the ordinary `claude_usage`
+    // read above picks the fresh numbers up in structured form. Parsing the
+    // envelope's English prose is what this module moved away from.
+    (Ok(()), Some(path))
+}
+
+/// Forces Claude Code to re-fetch its usage numbers, then returns; the
+/// caller re-reads `claude_usage` for the result.
+///
+/// Needed because nothing else in this user's workflow refreshes that
+/// cache. Measured on this Mac (2026-09-24): `~/.claude.json`'s mtime was
+/// current to the second while `cachedUsageUtilization.fetchedAtMs` sat
+/// 12 hours stale — the CLI rewrites the file constantly for unrelated
+/// reasons but only refreshes the usage key on its own schedule. A plain
+/// `claude -p "hi"` did NOT move `fetchedAtMs`; `claude -p "/usage"` did
+/// (11:52 → 00:00), which is why it specifically is the command here.
+///
+/// Sessions driven through happy-cli's SDK wrapper — i.e. every session
+/// this app launches — never trigger that refresh, so a 5-hour window
+/// silently passes its `resets_at` and renders "—" indefinitely with no
+/// way for the user to recover it.
+#[tauri::command]
+pub async fn refresh_claude_usage(state: tauri::State<'_, ClaudePath>) -> Result<(), String> {
+    let home = home_dir()?;
+    let cached = state.0.lock().unwrap().clone();
+
+    // On `spawn_blocking`'s pool, not an async worker: `Command::output()`
+    // blocks its OS thread for the subprocess's entire multi-second life.
+    let (result, resolved_path) = tauri::async_runtime::spawn_blocking(move || run_usage_refresh(cached, home))
+        .await
+        .map_err(|e| e.to_string())?;
+
+    *state.0.lock().unwrap() = resolved_path;
+    result
 }
 
 #[cfg(test)]

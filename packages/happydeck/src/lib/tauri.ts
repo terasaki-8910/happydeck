@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { claudeUsageTimeoutError, credentialsReadTimeoutError, credentialsWriteTimeoutError, localMachineIdTimeoutError } from './errorMessages';
+import { claudeUsageRefreshTimeoutError, claudeUsageTimeoutError, credentialsReadTimeoutError, credentialsWriteTimeoutError, localMachineIdTimeoutError } from './errorMessages';
 import { useSettingsStore } from '../store/settingsStore';
 
 export interface StoredCredentials {
@@ -14,6 +14,10 @@ const KEYCHAIN_TIMEOUT_MS = 15_000;
 // stuck IPC bridge, not a budget the read is expected to approach — it used
 // to be 20s, back when every poll spawned a ~3.5s `claude -p "/usage"`.
 const CLAUDE_USAGE_TIMEOUT_MS = 5_000;
+// The refresh, unlike the read, really does boot a whole Node + CLI process
+// (~3.7s measured on this Mac, 2026-09-24). This is headroom for a cold
+// start or a slow account-API round trip, not an expected duration.
+const CLAUDE_USAGE_REFRESH_TIMEOUT_MS = 30_000;
 
 /**
  * invoke() has no built-in timeout — unlike fetch(), a hung Rust-side call
@@ -77,4 +81,17 @@ export function positionTrafficLights(titlebarHeight: number): void {
  */
 export async function getClaudeUsageRaw(): Promise<string> {
   return withTauriTimeout(invoke<string>('claude_usage'), claudeUsageTimeoutError(useSettingsStore.getState().language), CLAUDE_USAGE_TIMEOUT_MS);
+}
+
+/**
+ * Makes Claude Code re-fetch its usage numbers into ~/.claude.json, so the
+ * next getClaudeUsageRaw() sees fresh ones. Spawns a subprocess — call it
+ * on demand (or when the cache is provably stale), never per poll.
+ */
+export async function refreshClaudeUsage(): Promise<void> {
+  return withTauriTimeout(
+    invoke<void>('refresh_claude_usage'),
+    claudeUsageRefreshTimeoutError(useSettingsStore.getState().language),
+    CLAUDE_USAGE_REFRESH_TIMEOUT_MS,
+  );
 }

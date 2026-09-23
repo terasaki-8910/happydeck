@@ -63,6 +63,7 @@ export function UsageIndicator() {
   const error = useUsageStore((s) => s.error);
   const parseFailure = useUsageStore((s) => s.parseFailure);
   const loading = useUsageStore((s) => s.loading);
+  const refreshing = useUsageStore((s) => s.refreshing);
   const fetchedAt = useUsageStore((s) => s.fetchedAt);
   const measuredAt = useUsageStore((s) => s.measuredAt);
   const refresh = useUsageStore((s) => s.refresh);
@@ -175,8 +176,11 @@ export function UsageIndicator() {
           <div className="session-menu-divider" />
           <div className="usage-popover-footer">
             <span className="usage-popover-updated">{measuredAt ? formatMeasured(language, measuredAt) : ''}</span>
-            <button type="button" className="usage-popover-refresh" disabled={loading} onClick={() => refresh()}>
-              {t('usageRefreshButton')}
+            {/* force: true — a plain re-read cannot change anything the
+                user is looking at here. The CLI's cache is the only source,
+                and only `claude -p "/usage"` moves it. */}
+            <button type="button" className="usage-popover-refresh" disabled={loading || refreshing} onClick={() => refresh(true)}>
+              {refreshing ? t('usageRefreshing') : t('usageRefreshButton')}
             </button>
           </div>
         </div>
