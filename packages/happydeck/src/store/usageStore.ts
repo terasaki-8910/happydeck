@@ -16,18 +16,19 @@ const POLL_INTERVAL_MS = 30 * 1000;
 const WARN_THRESHOLD = 80;
 const DANGER_THRESHOLD = 95;
 
-// How long to leave a provably-stale cache alone before spending a
-// subprocess on it. "Provably stale" is narrow on purpose (see
-// needsForcedRefresh): a window whose own reset time has passed, which
-// means the displayed number is not merely old but WRONG, and no amount of
-// re-reading the file can fix it.
-//
-// The floor exists because the refresh can legitimately fail to help — a
-// stale login refreshes nothing, and without a floor that would put the app
-// back to booting a CLI process every 30s, which is the exact cost the
-// file-read rewrite removed. 10 minutes keeps the worst case at ~6
-// subprocesses an hour instead of ~120.
-const FORCED_REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
+// A periodic subprocess-backed refresh, on top of the 30s free file read.
+// Verified live (2026-09-24, see src-tauri/src/claude_usage.rs's module
+// doc) that forcing one costs neither account quota (total_cost_usd: 0,
+// every usage.*_tokens field 0, repeated clean runs) nor an accumulating
+// junk transcript (each refresh deletes the one it produces) — the two
+// costs the 2026-09-08 rewrite was actually reacting to. What's left is
+// wall time: a real Node + CLI boot, ~3.7s measured, which is why this
+// stays a periodic escalation rather than every tick — stacking that onto
+// every 30s poll would make the badge visibly wait on a subprocess far
+// more often than the liveness this buys is worth. 5 minutes bounds a
+// stuck/expired window to a 5-minute-old worst case without reintroducing
+// the per-poll cost the file-read switch removed.
+const FORCED_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 // VITE_HAPPYDECK_MOCK=1 fixture — no real ~/.claude.json read happens
 // outside a Tauri runtime. Percentages are picked to exercise both the
@@ -55,12 +56,13 @@ interface UsageState {
   started: boolean;
   /** True while a subprocess-backed forced refresh is in flight — distinct from `loading`, which also covers the sub-ms file read. */
   refreshing: boolean;
-  /** When a forced refresh was last ATTEMPTED (not when it succeeded) — a failing refresh must back off exactly like a succeeding one. */
+  /** When a forced refresh was last ATTEMPTED (not when it succeeded) — a failing refresh must back off exactly like a succeeding one, or a login-stale account would respawn the subprocess every tick forever. */
   lastForcedRefreshAt: number | null;
   /**
    * @param force Spend a subprocess making Claude Code re-fetch the numbers
-   * before reading. Use for the explicit "refresh now" action; the polling
-   * path passes nothing and stays a plain file read.
+   * before reading. Used for the explicit "refresh now" action AND, on a
+   * timer, by the poll loop itself (see FORCED_REFRESH_INTERVAL_MS) — this
+   * is no longer the expensive path it once was, see that constant's doc.
    */
   refresh: (force?: boolean) => Promise<void>;
   /** Idempotent — call from App's mount effect. Starts the poll/visibility loop once per app launch. */
@@ -152,9 +154,9 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
     if (get().started) return;
     set({ started: true });
 
-    // Each tick decides for itself whether the plain file read is enough.
-    // Nothing here forces a refresh on a merely OLD cache — only on one
-    // that is demonstrably showing a wrong number.
+    // Each tick decides for itself whether it's due for the periodic
+    // subprocess-backed refresh (see shouldForceRefresh) or just the plain
+    // file read.
     const tick = () => {
       if (document.visibilityState !== 'visible') return;
       get().refresh(shouldForceRefresh(get()));
@@ -174,23 +176,16 @@ export const useUsageStore = create<UsageState>()((set, get) => ({
 
 /**
  * Whether this tick should spend a subprocess instead of just re-reading
- * the file.
+ * the file — i.e. whether FORCED_REFRESH_INTERVAL_MS has elapsed since the
+ * last attempt (not the last SUCCESS: a failing refresh — e.g. a stale
+ * login — must back off exactly like a succeeding one, or it would
+ * respawn the subprocess every 30s forever instead of every 5 minutes).
  *
- * The trigger is an EXPIRED window, not an old `measuredAt`. A cache
- * measured hours ago is perfectly correct as long as no window has rolled
- * over since; once one has, its percentage belongs to a period that already
- * ended, the UI is showing "—" for it, and re-reading the same file will
- * never produce anything else. That is the only state where the subprocess
- * buys something the free path cannot.
- *
- * Both guards matter. Without `refreshing`, the 30s poll would stack
- * refreshes on top of a ~3.7s subprocess that hasn't returned; without the
- * cooldown, a refresh that legitimately cannot help (stale login — the
- * confirmed 2026-09-03 Windows case) would respawn every 30s forever.
+ * `refreshing` guards the other overlap: without it, a slow ~3.7s
+ * subprocess could still be in flight when the next 30s poll tick fires.
  */
-export function shouldForceRefresh(state: Pick<UsageState, 'windows' | 'refreshing' | 'lastForcedRefreshAt'>, now: number = Date.now()): boolean {
+export function shouldForceRefresh(state: Pick<UsageState, 'refreshing' | 'lastForcedRefreshAt'>, now: number = Date.now()): boolean {
   if (MOCK_ENABLED || state.refreshing) return false;
-  if (!state.windows.some((w) => isWindowExpired(w, now))) return false;
   const last = state.lastForcedRefreshAt;
-  return last === null || now - last >= FORCED_REFRESH_COOLDOWN_MS;
+  return last === null || now - last >= FORCED_REFRESH_INTERVAL_MS;
 }

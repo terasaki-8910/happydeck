@@ -31,6 +31,12 @@ tauri-plugin-notification = "2.3.3"
 notify-rust = "4.18"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+# Already resolved to 1.24.1 transitively (tauri itself depends on it), so
+# pinning the same major adds no new crate to the build -- only the "v4"
+# feature and direct access. Used by claude_usage.rs to give each usage
+# refresh its own disposable `claude --session-id`, so the resulting
+# transcript file can be identified and deleted afterward.
+uuid = { version = "1", features = ["v4"] }
 
 # Already in the dependency tree transitively (wry/tao use these for their
 # own macOS traffic-light-inset support) -- pinned here at the same

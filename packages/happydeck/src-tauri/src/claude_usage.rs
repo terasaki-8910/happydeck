@@ -20,10 +20,27 @@
 //! was a stale login, which the subprocess path did not fix either — it
 //! reported a cost summary instead. Re-login fixed both.
 //!
-//! BUT the cache does have to be refreshable on demand, which is what
+//! BUT the cache does have to be refreshable, which is what
 //! `refresh_claude_usage` below is for — see its own doc for the measured
-//! reason. That is a deliberate, bounded partial return of the subprocess
-//! this module otherwise exists to avoid: on demand only, never per poll.
+//! reason. Both of the old cost concerns turned out to be independently
+//! fixable rather than inherent to the subprocess itself (verified live,
+//! 2026-09-24, not assumed):
+//!
+//! - Credits: `claude -p "/usage"` reports `total_cost_usd: 0` and every
+//!   `usage.*_tokens` field at 0, across repeated clean runs. It never drew
+//!   on the account's quota to begin with — the earlier framing of a
+//!   refresh "costing" something conflated this with the two costs below,
+//!   which are real but unrelated to the user's plan limits.
+//! - The junk transcript: still real per call, but avoidable. Passing a
+//!   fresh `--session-id` names exactly which transcript file this call
+//!   produced, so `refresh_claude_usage` deletes it immediately after —
+//!   nothing accumulates. (`--session-id` reuse errors with "already in
+//!   use" — confirmed live — so each call needs its own, which is exactly
+//!   what makes the resulting file unambiguous to clean up.)
+//! - Wall time (~3.7s measured): irreducible — it is a real Node + CLI
+//!   boot — but no longer compounds into either of the above, so a
+//!   several-times-a-minute cadence is no longer the same tradeoff the
+//!   2026-09-08 rewrite was reacting to.
 //!
 //! The frontend does the interpretation (see src/lib/claudeUsage.ts) so
 //! the mapping stays unit-testable without a Tauri runtime; this module
@@ -33,6 +50,7 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
+use uuid::Uuid;
 
 /// `~/.claude.json` is rewritten wholesale by the CLI — and often, for
 /// reasons unrelated to usage (project history, MCP state; its mtime is
@@ -222,8 +240,29 @@ fn resolve_claude_path(home: &str) -> PathBuf {
     PathBuf::from("claude")
 }
 
+/// Claude Code stores a session's transcript at
+/// `~/.claude/projects/<slug>/<session-id>.jsonl`, where `<slug>` is the
+/// process's cwd with every path separator rewritten to `-` (confirmed
+/// live, 2026-09-24: cwd `/Users/masa669` produced folder `-Users-masa669`,
+/// exactly). Reconstructing it from the disposable `--session-id` this
+/// module itself generated means cleanup only ever targets a file THIS
+/// call produced — never a real conversation's history — even in the
+/// failure paths below, where best-effort is enough: worst case a file
+/// gets left behind, exactly like before this existed.
+fn transcript_path(home: &str, session_id: &Uuid) -> PathBuf {
+    let slug: String = home.chars().map(|c| if c == '/' || c == '\\' { '-' } else { c }).collect();
+    Path::new(home).join(".claude").join("projects").join(slug).join(format!("{session_id}.jsonl"))
+}
+
 fn run_usage_refresh(cached_path: Option<PathBuf>, home: String) -> (Result<(), String>, Option<PathBuf>) {
     let path = cached_path.unwrap_or_else(|| resolve_claude_path(&home));
+
+    // A fresh id per call, not reused: confirmed live that `--session-id`
+    // errors ("already in use") the second time the same one names an
+    // existing transcript — which is exactly what makes the file this call
+    // produces unambiguous to find and delete afterward.
+    let session_id = Uuid::new_v4();
+    let transcript = transcript_path(&home, &session_id);
 
     // A `.cmd` is a batch script rather than an image CreateProcess can
     // launch, but this deliberately does NOT wrap it in `cmd.exe /C` by
@@ -235,6 +274,8 @@ fn run_usage_refresh(cached_path: Option<PathBuf>, home: String) -> (Result<(), 
         .arg("/usage")
         .arg("--output-format")
         .arg("json")
+        .arg("--session-id")
+        .arg(session_id.to_string())
         .current_dir(&home)
         .output();
 
@@ -245,6 +286,10 @@ fn run_usage_refresh(cached_path: Option<PathBuf>, home: String) -> (Result<(), 
         // repeating the same failure forever.
         Err(e) => return (Err(format!("failed to launch claude at {}: {e}", path.display())), None),
     };
+
+    // Best-effort regardless of outcome below: a failed run can still have
+    // written a partial transcript before erroring.
+    let _ = std::fs::remove_file(&transcript);
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -282,6 +327,12 @@ fn run_usage_refresh(cached_path: Option<PathBuf>, home: String) -> (Result<(), 
 /// this app launches — never trigger that refresh, so a 5-hour window
 /// silently passes its `resets_at` and renders "—" indefinitely with no
 /// way for the user to recover it.
+///
+/// Does not touch the account's usage quota (see the module doc's
+/// verification) and leaves no transcript behind (`run_usage_refresh`
+/// deletes the one it names), so this is safe to call on a short periodic
+/// timer, not just the explicit "refresh now" action — see
+/// src/store/usageStore.ts for that cadence.
 #[tauri::command]
 pub async fn refresh_claude_usage(state: tauri::State<'_, ClaudePath>) -> Result<(), String> {
     let home = home_dir()?;
@@ -300,6 +351,19 @@ pub async fn refresh_claude_usage(state: tauri::State<'_, ClaudePath>) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Locks in the slug rule confirmed live against a real `claude`
+    /// invocation (2026-09-24): cwd `/Users/masa669` produced the transcript
+    /// folder `-Users-masa669`, i.e. every `/` becomes `-`, nothing else
+    /// changes. If a future CLI version slugifies differently, this is the
+    /// test that should catch cleanup silently stopping (it fails open —
+    /// see run_usage_refresh's own doc — so nothing else would).
+    #[test]
+    fn transcript_path_matches_the_cli_slug_rule() {
+        let id = Uuid::nil();
+        let path = transcript_path("/Users/masa669", &id);
+        assert_eq!(path, PathBuf::from("/Users/masa669/.claude/projects/-Users-masa669/00000000-0000-0000-0000-000000000000.jsonl"));
+    }
 
     /// A plain temp path plus cleanup — no dev-dependency for something this
     /// small, and each test names its own file so they can't collide.
