@@ -350,19 +350,36 @@ export function AgentSettingsCaption({
           t('modeUnknown')
         )}
       </span>
-      {/* Opens the list, not a per-session deep link, because there is no
+      {/* Hidden, not just left clickable, once `anyRecorded` is true:
+          reusing that exact heuristic here rather than adding a new one is
+          deliberate — it already IS this app's proxy for "the relay daemon
+          spawned this as a headless Agent-SDK session" (see the field doc
+          above: happy-cli never writes these three for anything else). And
+          an Agent-SDK session provably cannot run /remote-control (verified
+          against claude 2.1.258, see REMOTE_CONTROL_URL's own doc) — so for
+          every session this heuristic flags, the button behind this icon is
+          not merely unlikely to help, it is dead. A clickable control with
+          nothing behind it is worse than no control (2026-07-17 UI review:
+          "empty-state clutter... invisible to test assertions but obvious
+          on sight"), and the false-negative case (a headless session that
+          somehow lacks all three fields) only returns to today's always-
+          shown behavior — never worse.
+          For a session where this heuristic says false, opens the list
+          rather than a per-session deep link, because there still is no
           per-session URL to open: claude.ai/code is exactly what Claude
           Code's own /remote-control guidance tells you to visit ("Open the
           Code tab in the Claude mobile app, or visit claude.ai/code"), and
           no session-scoped URL is constructed anywhere in the CLI binary.
-          Deliberately has no on/off state: whether a session actually has
-          Remote Control active is not observable from here — no file, env
-          var or API exposes it, and the Happy relay carries no such field —
-          so a blue "active" indicator would be a guess. Same reason the
-          effort control went read-only in 0.5.0. */}
-      <button type="button" className="tile-composer-caption-remote" title={t('remoteControlHint')} aria-label={t('remoteControlOpen')} onClick={() => void openUrl(REMOTE_CONTROL_URL)}>
-        <LuSmartphone size={13} strokeWidth={2} />
-      </button>
+          Deliberately has no on/off state even then: whether a session
+          actually has Remote Control active is not observable from here —
+          no file, env var or API exposes it, and the Happy relay carries no
+          such field — so a blue "active" indicator would be a guess. Same
+          reason the effort control went read-only in 0.5.0. */}
+      {!anyRecorded && (
+        <button type="button" className="tile-composer-caption-remote" title={t('remoteControlHint')} aria-label={t('remoteControlOpen')} onClick={() => void openUrl(REMOTE_CONTROL_URL)}>
+          <LuSmartphone size={13} strokeWidth={2} />
+        </button>
+      )}
     </div>
   );
 }
