@@ -1,5 +1,6 @@
 import { type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LuFileUp, LuLoaderCircle, LuSendHorizontal } from 'react-icons/lu';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { buildAgentMessageMeta } from '../lib/agentMessageMeta';
@@ -13,6 +14,9 @@ import {
   attachmentTimedOutError,
   attachmentWriteFailedError,
   cwdNotKnownError,
+  remoteControlNoEntryError,
+  remoteControlNotConnectedError,
+  remoteControlUnreachableError,
   unknownAttachMachineError,
 } from '../lib/errorMessages';
 import { logError } from '../lib/errorLog';
@@ -21,6 +25,7 @@ import { type TranslationKey, useT } from '../lib/i18n';
 import { markdownComponents } from '../lib/markdownComponents';
 import { resolveOpenTerminalAction } from '../lib/openTerminal';
 import { alwaysAllowGrant, describePendingRequest } from '../lib/permissionRequest';
+import { REMOTE_CONTROL_LIST_URL, resolveRemoteControlUrl } from '../lib/remoteControl';
 import { explainResumeError } from '../lib/resumeError';
 import { deriveTitle } from '../lib/sessionTitle';
 import { useSessionDraft } from '../lib/useSessionDraft';
@@ -222,6 +227,8 @@ export function SessionTile({
   const terminalWindowMode = useSettingsStore((s) => s.terminalWindowMode);
   const sshTargets = useSettingsStore((s) => s.sshTargets);
   const runMachineBash = useHappyStore((s) => s.runMachineBash);
+  const listMachineDirectory = useHappyStore((s) => s.listMachineDirectory);
+  const readMachineFile = useHappyStore((s) => s.readMachineFile);
 
   const { value: draft, set: setDraft, reset: resetDraft, undo: undoDraft, redo: redoDraft } = useSessionDraft(session.id);
   const [busy, setBusy] = useState(false);
@@ -300,6 +307,17 @@ export function SessionTile({
         effortLevel?: string;
         slashCommands?: string[];
         mcpServers?: { name: string; status: string }[];
+        /**
+         * These three are written by happy-cli itself, unlike the three mode
+         * fields above — `claudeSessionId` on its SessionStart hook (so it is
+         * present for every claude-flavour session it has heard start, 123 of
+         * 150 rows on this account when checked), `homeDir`/`os` at spawn.
+         * Together they are exactly what locating this session's Remote
+         * Control link on its own machine needs — see remoteControl.ts.
+         */
+        claudeSessionId?: string;
+        homeDir?: string;
+        os?: string;
       }
     | null;
   const path = metadata?.path ?? session.id;
@@ -642,6 +660,45 @@ export function SessionTile({
       setAttaching(false);
     }
   };
+
+  /**
+   * Opens THIS session on claude.ai rather than the account-wide session
+   * list, which is all the phone icon used to manage — the link is only
+   * knowable from the session's own machine, so the click asks it (see
+   * remoteControl.ts for the URL's derivation and where the id is stored).
+   *
+   * Only the three "we can't answer" outcomes raise the tile's error banner.
+   * A session with no `claudeSessionId` at all falls back to the list URL
+   * instead: nothing is wrong there, happy-cli just hasn't synced the field
+   * yet (its SessionStart hook writes it a beat after the session appears),
+   * and the list still gets the user to their session in one more click.
+   */
+  const openRemoteControl = () =>
+    runAction(async () => {
+      const machineId = metadata?.machineId;
+      const claudeSessionId = metadata?.claudeSessionId;
+      const homeDir = metadata?.homeDir;
+      if (!machineId || !claudeSessionId || !homeDir) {
+        await openUrl(REMOTE_CONTROL_LIST_URL);
+        return;
+      }
+      const host = metadata?.host ?? machineId;
+      const resolution = await resolveRemoteControlUrl(
+        { listMachineDirectory, readMachineFile },
+        { machineId, homeDir, os: metadata?.os, claudeSessionId },
+      );
+      switch (resolution.kind) {
+        case 'url':
+          await openUrl(resolution.url);
+          return;
+        case 'not-connected':
+          throw new Error(remoteControlNotConnectedError(language, host));
+        case 'no-entry':
+          throw new Error(remoteControlNoEntryError(language, host));
+        case 'unreachable':
+          throw new DetailedError(remoteControlUnreachableError(language, host), resolution.detail);
+      }
+    });
 
   const handleAttachClick = () => fileInputRef.current?.click();
 
@@ -1103,6 +1160,7 @@ export function SessionTile({
           permissionMode={metadata?.permissionMode}
           modelMode={metadata?.modelMode}
           effortLevel={metadata?.effortLevel}
+          onOpenRemoteControl={openRemoteControl}
         />
       </div>
     </section>

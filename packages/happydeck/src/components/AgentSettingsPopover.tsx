@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { LuBrain, LuShield, LuSmartphone } from 'react-icons/lu';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { CLAUDE_EFFORT_LEVELS, CLAUDE_MODEL_MODES, CLAUDE_PERMISSION_MODES, compactModelLabel, isClaudeBypassEquivalent, permissionColorVar, translatedOptionName, type ModeOption } from '../lib/agentOptions';
 import { useT, type TranslationKey } from '../lib/i18n';
 
@@ -28,17 +27,6 @@ function labelOf(t: (key: TranslationKey) => string, options: ModeOption[], key:
 }
 
 type OpenMenu = 'model' | 'permission' | null;
-
-/**
- * Claude Code's own Remote Control landing page — the exact destination its
- * `/remote-control` guidance names. Note this is Claude's feature, entirely
- * separate from the Happy relay happydeck itself runs on: it has to be
- * turned on from the session's own machine (`/remote-control`, or
- * `remoteControlAtStartup` in that machine's settings.json), and only works
- * for interactive sessions — an Agent-SDK session, which is what the relay
- * daemon spawns, cannot have it. Verified against claude 2.1.258.
- */
-const REMOTE_CONTROL_URL = 'https://claude.ai/code';
 
 /**
  * Compact composer-row trigger, right edge (left of send) — two separately
@@ -322,12 +310,20 @@ export function AgentSettingsCaption({
   permissionMode,
   modelMode,
   effortLevel,
+  onOpenRemoteControl,
 }: {
   path: string;
   // Same undefined-means-unrecorded contract as AgentSettingsPopoverProps.
   permissionMode: string | undefined;
   modelMode: string | undefined;
   effortLevel: string | undefined;
+  /**
+   * Resolving this session's own Remote Control URL needs an RPC to the
+   * session's machine and an error surface for the three ways that can come
+   * back empty, so the handler is the tile's (see SessionTile's
+   * openRemoteControl) — this component only owns WHEN the icon is shown.
+   */
+  onOpenRemoteControl: () => void;
 }) {
   const t = useT();
   // The all-absent case is not the rare one — happy-cli writes none of these
@@ -356,27 +352,27 @@ export function AgentSettingsCaption({
           spawned this as a headless Agent-SDK session" (see the field doc
           above: happy-cli never writes these three for anything else). And
           an Agent-SDK session provably cannot run /remote-control (verified
-          against claude 2.1.258, see REMOTE_CONTROL_URL's own doc) — so for
-          every session this heuristic flags, the button behind this icon is
-          not merely unlikely to help, it is dead. A clickable control with
+          against claude 2.1.258, see remoteControl.ts) — so for every
+          session this heuristic flags, the button behind this icon is not
+          merely unlikely to help, it is dead. A clickable control with
           nothing behind it is worse than no control (2026-07-17 UI review:
           "empty-state clutter... invisible to test assertions but obvious
           on sight"), and the false-negative case (a headless session that
           somehow lacks all three fields) only returns to today's always-
           shown behavior — never worse.
-          For a session where this heuristic says false, opens the list
-          rather than a per-session deep link, because there still is no
-          per-session URL to open: claude.ai/code is exactly what Claude
-          Code's own /remote-control guidance tells you to visit ("Open the
-          Code tab in the Claude mobile app, or visit claude.ai/code"), and
-          no session-scoped URL is constructed anywhere in the CLI binary.
-          Deliberately has no on/off state even then: whether a session
-          actually has Remote Control active is not observable from here —
-          no file, env var or API exposes it, and the Happy relay carries no
-          such field — so a blue "active" indicator would be a guess. Same
-          reason the effort control went read-only in 0.5.0. */}
+          For a session where this heuristic says false, the click opens
+          THAT session's own page on claude.ai, resolved from the session's
+          machine — see remoteControl.ts, which also records why an earlier
+          note here ("no session-scoped URL is constructed anywhere in the
+          CLI binary") was simply wrong.
+          Still deliberately has no on/off state: the answer lives on
+          another machine and costs an RPC, so painting one here would mean
+          polling every tile to keep a dot honest. The click is where the
+          question gets asked, and the tile's error banner is where "not on
+          yet" gets said. Same restraint as the effort control going
+          read-only in 0.5.0. */}
       {!anyRecorded && (
-        <button type="button" className="tile-composer-caption-remote" title={t('remoteControlHint')} aria-label={t('remoteControlOpen')} onClick={() => void openUrl(REMOTE_CONTROL_URL)}>
+        <button type="button" className="tile-composer-caption-remote" title={t('remoteControlHint')} aria-label={t('remoteControlOpen')} onClick={onOpenRemoteControl}>
           <LuSmartphone size={13} strokeWidth={2} />
         </button>
       )}

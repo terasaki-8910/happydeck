@@ -165,3 +165,28 @@ export function localizeUsageError(language: Language, raw: string): string {
       return raw;
   }
 }
+
+/**
+ * The three ways resolving a session's own Remote Control URL can come back
+ * empty (see remoteControl.ts). None of them is a bug in happydeck, so each
+ * names the one thing the user can do about it instead of just failing:
+ * Remote Control has to be turned on from the session's own machine, and
+ * that machine has to be reachable to be asked whether it is.
+ */
+export function remoteControlNotConnectedError(language: Language, host: string): string {
+  return language === 'ja'
+    ? `このセッションではリモートコントロールが有効になっていません。${host} 側のこのセッションで /remote-control を実行してください。`
+    : `Remote Control isn't on for this session — run /remote-control in it, on ${host}.`;
+}
+
+export function remoteControlNoEntryError(language: Language, host: string): string {
+  return language === 'ja'
+    ? `${host} 上にこのセッションのClaude Codeプロセスが見つかりません。すでに終了しているか、リモートコントロールに対応していないバージョンです。`
+    : `No live Claude Code process for this session on ${host} — it has already exited, or its CLI is too old for Remote Control.`;
+}
+
+export function remoteControlUnreachableError(language: Language, host: string): string {
+  return language === 'ja'
+    ? `${host} にリモートコントロールの状態を問い合わせられませんでした。`
+    : `Couldn't ask ${host} whether Remote Control is on.`;
+}
