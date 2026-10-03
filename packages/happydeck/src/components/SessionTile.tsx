@@ -37,6 +37,7 @@ import { AgentSettingsCaption, AgentSettingsPopover } from './AgentSettingsPopov
 import { AskUserQuestionCard, type AskUserQuestionQuestion } from './AskUserQuestionCard';
 import { AttachmentFile } from './AttachmentFile';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { HostVersionBadge } from './HostVersionBadge';
 import { mergePendingAttachments, type PendingAttachment, PendingAttachments } from './PendingAttachments';
 import { SlashCommandAutocomplete } from './SlashCommandAutocomplete';
 import { TileActionsMenu } from './TileActionsMenu';
@@ -873,7 +874,7 @@ export function SessionTile({
           />
         )}
         <span className={`status-dot ${status.className}`} title={t(status.labelKey)} />
-        {metadata?.host && <span className="tile-host">{metadata.host}</span>}
+        {metadata?.host && <HostVersionBadge host={metadata.host} machineId={metadata.machineId} />}
         {renamingTitle ? (
           <form className="tile-title-rename" onSubmit={submitTitleRename}>
             <input

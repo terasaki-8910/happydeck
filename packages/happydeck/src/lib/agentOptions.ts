@@ -45,11 +45,38 @@ export const CLAUDE_PERMISSION_MODES: ModeOption[] = [
   { key: 'bypassPermissions', name: 'bypass (yolo)' },
 ];
 
+// Two kinds of entry live in this list and they age differently:
+//
+//   * Bare ALIASES ('opus', 'fable', 'sonnet', 'haiku') — the CLI resolves
+//     each to whatever it currently considers the latest in that family
+//     (`claude --help`: "Provide an alias for the latest model (e.g.
+//     'fable', 'opus', or 'sonnet') or a model's full name"). Their
+//     version-numbered labels below came from the happy-app reference list
+//     and are only ever as fresh as that list — an alias silently starts
+//     pointing somewhere else when the CLI updates, and nothing here can
+//     detect it. Treat those numbers as "roughly what this alias meant",
+//     not as a claim about the machine you're spawning on.
+//   * Full MODEL IDs ('claude-opus-5-5', ...) — exact, and they mean the
+//     same thing forever. Verified present in the installed Claude Code
+//     2.1.283 binary (its own model table and its availableModels
+//     settings docs, which use "claude-opus-5" allowing "claude-opus-5-5"
+//     as the worked example), not inferred from the API's model list.
+//
+// happy-cli applies no allowlist of its own — appendDaemonSpawnModeArgs
+// (dist/index-D9QEUZM-.mjs:6044) pushes `--model <modelMode>` verbatim for
+// anything that isn't 'default' — so a full id added here reaches the CLI
+// unchanged. The cost of a model id a given machine's Claude Code doesn't
+// know is therefore paid at spawn time on THAT machine, which is also why
+// the host badge now reports each machine's Claude Code version (see
+// lib/machineVersions.ts).
 export const CLAUDE_MODEL_MODES: ModeOption[] = [
   { key: 'default', name: 'default model' },
+  { key: 'claude-opus-5-5', name: 'opus 5.5' },
   { key: 'claude-opus-5', name: 'opus 5' },
   { key: 'opus', name: 'opus 4.8' },
+  { key: 'claude-fable-5-1', name: 'fable 5.1' },
   { key: 'fable', name: 'fable 5' },
+  { key: 'claude-sonnet-5', name: 'sonnet 5' },
   { key: 'sonnet', name: 'sonnet 4.6' },
   { key: 'haiku', name: 'haiku 4.5' },
   // opusplan: not in the happy-app reference's hardcoded list either, but a
@@ -75,7 +102,9 @@ export const CLAUDE_EFFORT_LEVELS: ModeOption[] = [
  * (per explicit request: always show what it concretely resolves to), and
  * collapses opus-5/opus-4.8 into one "opus" label (explicitly OK'd — the
  * full popover list below still keeps them separate as real distinct
- * --model values).
+ * --model values). The same collapse now covers every full model id in
+ * CLAUDE_MODEL_MODES, so adding one there never leaks a 16-character
+ * "claude-fable-5-1" into a pill sized for "fable".
  *
  * The "default" resolution to 'opus' is sourced from happy-cli's own
  * fallback (`DEFAULT_CLAUDE_MODEL = 'opus'`, re-confirmed in the installed
@@ -98,7 +127,12 @@ export const CLAUDE_EFFORT_LEVELS: ModeOption[] = [
 export function compactModelLabel(modelMode: string | undefined): string | null {
   if (!modelMode) return null;
   if (modelMode === 'default') return 'opus';
-  if (modelMode === 'claude-opus-5' || modelMode === 'opus') return 'opus';
+  // `claude-<family>-<version>` → `<family>`, which also covers the bare
+  // aliases ('opus', 'fable', ...) by leaving them untouched. A custom
+  // model id the user typed in that doesn't match this shape still falls
+  // through verbatim rather than being guessed at.
+  const family = /^claude-(opus|fable|sonnet|haiku|mythos)-/.exec(modelMode);
+  if (family) return family[1];
   return modelMode;
 }
 

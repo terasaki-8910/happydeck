@@ -314,7 +314,12 @@ export function mockMachines(): DecryptedMachine[] {
       activeAt: now,
       createdAt: now - 1000000,
       updatedAt: now,
-      metadata: { host: 'MacBook-Air.local', platform: 'darwin', homeDir: '/Users/dev' },
+      // happyCliVersion is deliberately BEHIND the version store/
+      // machineVersionStore.ts's MOCK_ENTRY reports as installed, so the host
+      // badge popover's "the daemon is still running the old one" note renders
+      // during mock UI work instead of only ever appearing for a few minutes
+      // after a real update.
+      metadata: { host: 'MacBook-Air.local', platform: 'darwin', homeDir: '/Users/dev', happyHomeDir: '/Users/dev/.happy', happyCliVersion: '1.2.4' },
       daemonState: null,
       dataKey: null,
     },
@@ -324,7 +329,7 @@ export function mockMachines(): DecryptedMachine[] {
       activeAt: now,
       createdAt: now - 1000000,
       updatedAt: now,
-      metadata: { host: 'omen6', platform: 'win32', homeDir: 'C:\\Users\\dev' },
+      metadata: { host: 'omen6', platform: 'win32', homeDir: 'C:\\Users\\dev', happyHomeDir: 'C:\\Users\\dev\\.happy', happyCliVersion: '1.2.5' },
       daemonState: null,
       dataKey: null,
     },

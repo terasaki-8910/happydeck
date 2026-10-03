@@ -3432,3 +3432,301 @@ body {
   outline: 2px solid var(--accent-text);
   outline-offset: 1px;
 }
+
+/* ── Host badge version popover ──────────────────────────────────────────
+   The badge itself is now a button (hover/click opens the popover), so the
+   base .tile-host rule above keeps the chip look and these only strip the
+   browser's button chrome. .tile-host-plain is the fallback render for a
+   session whose metadata carries a host but no machineId — nothing to
+   probe, so nothing to open. */
+button.tile-host {
+  background: none;
+  font: inherit;
+  font-size: 10px;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+button.tile-host:hover,
+button.tile-host:focus-visible {
+  color: var(--text-dim);
+  border-color: var(--text-faint);
+}
+
+.tile-host-plain {
+  cursor: default;
+}
+
+/* Portalled to <body> and fixed rather than anchored inside the tile:
+   .tile is overflow:hidden with a max-height, so a popover opened from its
+   header would be cut off part-way down. */
+.host-version-popover {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-tile);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  /* "フワッと" — a short fade with a few px of travel, so the popover
+     arrives rather than snapping into place. Opacity+transform only, both
+     compositor-only properties. */
+  animation: host-version-in 140ms ease-out;
+}
+
+@keyframes host-version-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .host-version-popover {
+    animation: none;
+  }
+}
+
+.host-version-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.host-version-host {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-version-platform {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.host-version-item {
+  padding: 5px 4px;
+}
+
+.host-version-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.host-version-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.host-version-note {
+  margin: 2px 0 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.host-version-values {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.host-version-dim {
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+/* The only colored thing in the popover: "there is a newer one" is the
+   single piece of information worth pulling the eye, and the accent is
+   already this app's one accent. */
+.host-version-stale {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.host-version-latest {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.host-version-update-button {
+  flex-shrink: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 10px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.host-version-update-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.host-version-update-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.host-version-manual {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-faint);
+  cursor: help;
+}
+
+.host-version-error {
+  margin: 0;
+  padding: 4px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--danger);
+}
+
+.host-version-ok {
+  margin: 0;
+  padding: 4px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--status-online);
+}
+
+.host-version-update {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.host-version-update-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.host-version-update-head code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.host-version-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 10px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.host-version-dismiss:hover {
+  color: var(--text);
+}
+
+.host-version-log {
+  margin: 0;
+  max-height: 110px;
+  overflow: auto;
+  padding: 6px;
+  background: var(--bg);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.host-version-running {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 2px 4px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.host-version-spin {
+  flex-shrink: 0;
+  animation: tile-composer-spin 0.9s linear infinite;
+}
+
+.host-version-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px 4px 0;
+  border-top: 1px solid var(--border);
+}
+
+.host-version-checked {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.host-version-recheck {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.host-version-recheck:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.host-version-recheck:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The popover takes focus when opened from the keyboard (see
+   HostVersionBadge) purely to put its buttons next in the tab order — it
+   is not itself an action, so it gets no focus ring of its own. */
+.host-version-popover:focus {
+  outline: none;
+}
